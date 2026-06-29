@@ -1,0 +1,20 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "RQST DJ Console",
+  "version": "0.1.0",
+  "identifier": "com.rqst.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:3000",
+    "frontendDist": "../.output/public"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "RQST DJ Console",
+        "width": 1440,
+        "height": 980
+      }
+    ]
+  }
+}

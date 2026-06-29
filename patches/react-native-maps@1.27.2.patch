@@ -1,0 +1,332 @@
+--- a/ios/AirMaps/RNMapsMapView.mm
++++ b/ios/AirMaps/RNMapsMapView.mm
+@@ -6,6 +6,8 @@
+ //  Copyright © 2024 react-native-maps. All rights reserved.
+ //
+ 
++#ifdef RCT_NEW_ARCH_ENABLED
++
+ #import "RNMapsMapView.h"
+ #import "AIRMap.h"
+ #import "AIRMapMarker.h"
+@@ -638,3 +640,4 @@
+     return RNMapsMapView.class;
+ }
+ 
++#endif
+--- a/ios/AirMaps/RNMapsMarkerView.mm
++++ b/ios/AirMaps/RNMapsMarkerView.mm
+@@ -6,6 +6,8 @@
+ //  Copyright © 2024 react-native-maps. All rights reserved.
+ //
+ 
++#ifdef RCT_NEW_ARCH_ENABLED
++
+ #import "RNMapsMarkerView.h"
+ #import "AIRMap.h"
+ #import "AIRMapMarker.h"
+@@ -439,3 +441,4 @@
+     return RNMapsMarkerView.class;
+ }
+ 
++#endif
+--- a/ios/AirGoogleMaps/RNMapsGoogleMapView.mm
++++ b/ios/AirGoogleMaps/RNMapsGoogleMapView.mm
+@@ -5,6 +5,7 @@
+ //  Created by Salah Ghanim on 23.11.24.
+ //  Copyright © 2024 react-native-maps. All rights reserved.
+ //
++#ifdef RCT_NEW_ARCH_ENABLED
+ #ifdef HAVE_GOOGLE_MAPS
+ 
+ #import "RNMapsGoogleMapView.h"
+@@ -690,3 +691,4 @@
+ }
+ 
+#endif
+#endif
+--- a/src/MapMarkerNativeComponent.ts
++++ b/src/MapMarkerNativeComponent.ts
+@@ -1,5 +1,5 @@
+ import type {HostComponent} from 'react-native';
+-import {codegenNativeCommands} from 'react-native';
++import codegenNativeCommands from 'react-native/Libraries/Utilities/codegenNativeCommands';
+ import type {NativeProps} from './MapMarker';
+ import type {LatLng} from './sharedTypes';
+ 
+--- a/src/MapViewNativeComponent.ts
++++ b/src/MapViewNativeComponent.ts
+@@ -1,5 +1,5 @@
+ import type {HostComponent} from 'react-native';
+-import {codegenNativeCommands} from 'react-native';
++import codegenNativeCommands from 'react-native/Libraries/Utilities/codegenNativeCommands';
+ import type {NativeProps} from './MapView';
+ import type {Camera, EdgePadding} from './MapView.types';
+ import type {LatLng, Region} from './sharedTypes';
+--- a/src/specs/NativeComponentCallout.ts
++++ b/src/specs/NativeComponentCallout.ts
+@@ -1,6 +1,6 @@
+ import type {HostComponent, ViewProps} from 'react-native';
+ 
+-import {codegenNativeComponent} from 'react-native';
++import codegenNativeComponent from 'react-native/Libraries/Utilities/codegenNativeComponent';
+ import type {
+   Double,
+   BubblingEventHandler,
+--- a/src/specs/NativeComponentCircle.ts
++++ b/src/specs/NativeComponentCircle.ts
+@@ -1,6 +1,6 @@
+ import type {HostComponent, ViewProps, ColorValue} from 'react-native';
+ 
+-import {codegenNativeComponent} from 'react-native';
++import codegenNativeComponent from 'react-native/Libraries/Utilities/codegenNativeComponent';
+ import type {
+   Double,
+   Float,
+--- a/src/specs/NativeComponentGoogleMapView.ts
++++ b/src/specs/NativeComponentGoogleMapView.ts
+@@ -1,8 +1,8 @@
+ // @ts-nocheck
+ import type {HostComponent, ViewProps, ColorValue} from 'react-native';
+ 
+-import {codegenNativeComponent, codegenNativeCommands} from 'react-native';
++import codegenNativeComponent from 'react-native/Libraries/Utilities/codegenNativeComponent';
++import codegenNativeCommands from 'react-native/Libraries/Utilities/codegenNativeCommands';
+ import type {
+   Double,
+   Int32,
+--- a/src/specs/NativeComponentGooglePolygon.ts
++++ b/src/specs/NativeComponentGooglePolygon.ts
+@@ -1,6 +1,6 @@
+ import type {HostComponent, ViewProps, ColorValue} from 'react-native';
+ 
+-import {codegenNativeComponent} from 'react-native';
++import codegenNativeComponent from 'react-native/Libraries/Utilities/codegenNativeComponent';
+ import type {
+   Double,
+   BubblingEventHandler,
+--- a/src/specs/NativeComponentMapView.ts
++++ b/src/specs/NativeComponentMapView.ts
+@@ -1,8 +1,8 @@
+ // @ts-nocheck
+ import type {HostComponent, ViewProps, ColorValue} from 'react-native';
+ 
+-import {codegenNativeComponent, codegenNativeCommands} from 'react-native';
++import codegenNativeComponent from 'react-native/Libraries/Utilities/codegenNativeComponent';
++import codegenNativeCommands from 'react-native/Libraries/Utilities/codegenNativeCommands';
+ import type {
+   Double,
+   Int32,
+--- a/src/specs/NativeComponentMarker.ts
++++ b/src/specs/NativeComponentMarker.ts
+@@ -6,8 +6,8 @@ import type {
+   ImageSourcePropType as ImageSource,
+ } from 'react-native';
+ 
+-import {codegenNativeComponent, codegenNativeCommands} from 'react-native';
++import codegenNativeComponent from 'react-native/Libraries/Utilities/codegenNativeComponent';
++import codegenNativeCommands from 'react-native/Libraries/Utilities/codegenNativeCommands';
+ import type {
+   Int32,
+   Double,
+--- a/src/specs/NativeComponentOverlay.ts
++++ b/src/specs/NativeComponentOverlay.ts
+@@ -1,4 +1,4 @@
+-import {codegenNativeComponent} from 'react-native';
++import codegenNativeComponent from 'react-native/Libraries/Utilities/codegenNativeComponent';
+ import type {
+   Double,
+   Float,
+--- a/src/specs/NativeComponentPolyline.ts
++++ b/src/specs/NativeComponentPolyline.ts
+@@ -1,6 +1,6 @@
+ import type {HostComponent, ViewProps, ColorValue} from 'react-native';
+ 
+-import {codegenNativeComponent} from 'react-native';
++import codegenNativeComponent from 'react-native/Libraries/Utilities/codegenNativeComponent';
+ import type {
+   Double,
+   Float,
+--- a/src/specs/NativeComponentUrlTile.ts
++++ b/src/specs/NativeComponentUrlTile.ts
+@@ -1,6 +1,6 @@
+ import type {HostComponent, ViewProps} from 'react-native';
+ 
+-import {codegenNativeComponent} from 'react-native';
++import codegenNativeComponent from 'react-native/Libraries/Utilities/codegenNativeComponent';
+ import type {
+   Int32,
+   WithDefault,
+--- a/src/specs/NativeComponentWMSTile.ts
++++ b/src/specs/NativeComponentWMSTile.ts
+@@ -1,6 +1,6 @@
+ import type {HostComponent, ViewProps} from 'react-native';
+ 
+-import {codegenNativeComponent} from 'react-native';
++import codegenNativeComponent from 'react-native/Libraries/Utilities/codegenNativeComponent';
+ import type {
+   Int32,
+   WithDefault,
+--- a/ios/AirGoogleMaps/RNMapsGooglePolygonView.mm
++++ b/ios/AirGoogleMaps/RNMapsGooglePolygonView.mm
+@@ -5,6 +5,7 @@
+ //  Created by Salah Ghanim on 23.11.24.
+ //  Copyright © 2024 react-native-maps. All rights reserved.
+ //
++#ifdef RCT_NEW_ARCH_ENABLED
+ #ifdef HAVE_GOOGLE_MAPS
+ 
+ #import "RNMapsGooglePolygonView.h"
+@@ -224,3 +225,4 @@
+ }
+ 
+ #endif
++#endif
+--- a/ios/AirMaps/FabricPlaceholders/PlaceHolderGoogleMapView.mm
++++ b/ios/AirMaps/FabricPlaceholders/PlaceHolderGoogleMapView.mm
+@@ -5,6 +5,7 @@
+ //  Created by Salah Ghanim on 23.11.24.
+ //  Copyright © 2024 react-native-maps. All rights reserved.
+ //
++#ifdef RCT_NEW_ARCH_ENABLED
+ #include "RNMapsDefines.h"
+ 
+ #if HAVE_GOOGLE_MAPS == 0
+@@ -75,3 +76,4 @@
+ }
+ 
+ #endif
++#endif
+--- a/ios/AirMaps/FabricPlaceholders/PlaceHolderPolygonView.mm
++++ b/ios/AirMaps/FabricPlaceholders/PlaceHolderPolygonView.mm
+@@ -5,6 +5,7 @@
+ //  Created by Salah Ghanim on 23.11.24.
+ //  Copyright © 2024 react-native-maps. All rights reserved.
+ //
++#ifdef RCT_NEW_ARCH_ENABLED
+ #include "RNMapsDefines.h"
+ 
+ #if HAVE_GOOGLE_MAPS == 0
+@@ -50,3 +51,4 @@
+ }
+ 
+ #endif
++#endif
+--- a/src/specs/NativeAirMapsModule.ts
++++ b/src/specs/NativeAirMapsModule.ts
+@@ -33,4 +33,4 @@ export interface Spec extends TurboModule {
+   getCoordinateForPoint(tag: Double, point: Point): Promise<LatLng>;
+ }
+ 
+-export default TurboModuleRegistry.getEnforcing<Spec>('RNMapsAirModule');
++export default TurboModuleRegistry.get<Spec>('RNMapsAirModule');
+--- a/src/MapView.tsx
++++ b/src/MapView.tsx
+@@ -65,6 +65,13 @@ import GoogleMapView, {
+ } from './specs/NativeComponentGoogleMapView';
+ import createFabricMap, {type FabricMapHandle} from './createFabricMap';
+ 
++const mapsRuntime = globalThis as {
++  __turboModuleProxy?: unknown;
++  nativeFabricUIManager?: unknown;
++};
++const canUseFabricMaps =
++  mapsRuntime.nativeFabricUIManager != null &&
++  mapsRuntime.__turboModuleProxy != null;
++
+ const FabricMap = createFabricMap(FabricMapView, FabricCommands);
+ var FabricGoogleMap: any = null;
+ if (Platform.OS === 'ios') {
+@@ -1224,6 +1231,17 @@ class MapView extends React.Component<MapViewProps, State> {
+     }
+ 
+     const childrenNodes = this.state.isReady ? children : null;
++    const AIRMap = provider === 'google' ? airMaps.google : airMaps.default;
++
++    if (!canUseFabricMaps) {
++      return (
++        <ProviderContext.Provider value={this.props.provider}>
++          <AIRMap {...props} ref={this.map}>
++            {childrenNodes}
++          </AIRMap>
++        </ProviderContext.Provider>
++      );
++    }
++
+     if (provider === 'google' && Platform.OS === 'ios') {
+       return (
+         <ProviderContext.Provider value={this.props.provider}>
+--- a/src/MapMarker.tsx
++++ b/src/MapMarker.tsx
+@@ -39,6 +39,13 @@ import type {Modify} from './sharedTypesInternal';
+ import {PROVIDER_GOOGLE} from './ProviderConstants';
+ import {fixImageProp} from './fixImageProp';
+ 
++const markerRuntime = globalThis as {
++  __turboModuleProxy?: unknown;
++  nativeFabricUIManager?: unknown;
++};
++const canUseFabricMarker =
++  markerRuntime.nativeFabricUIManager != null &&
++  markerRuntime.__turboModuleProxy != null;
++
+ type AppleMarkerVisibility = 'hidden' | 'adaptive' | 'visible';
+ 
+ export type MapMarkerProps = ViewProps & {
+@@ -488,9 +495,9 @@ class MapMarker extends React.Component<MapMarkerProps> {
+   render() {
+     const {stopPropagation = false} = this.props;
+     if (this.fabricMarker === undefined) {
+       const provider = this.context;
+-      this.fabricMarker = !(
+-        Platform.OS === 'ios' && provider === PROVIDER_GOOGLE
+-      );
++      this.fabricMarker =
++        canUseFabricMarker &&
++        !(Platform.OS === 'ios' && provider === PROVIDER_GOOGLE);
+     }
+ 
+     let icon: any = this.props.icon;
+--- a/src/decorateMapComponent.ts
++++ b/src/decorateMapComponent.ts
+@@ -28,6 +28,13 @@ import FabricCallout from './specs/NativeComponentCallout';
+ import FabricPolyline from './specs/NativeComponentPolyline';
+ import FabricCircle from './specs/NativeComponentCircle';
+ import FabricOverlay from './specs/NativeComponentOverlay';
++
++const componentRuntime = globalThis as {
++  __turboModuleProxy?: unknown;
++  nativeFabricUIManager?: unknown;
++};
++const canUseFabricComponents =
++  componentRuntime.nativeFabricUIManager != null &&
++  componentRuntime.__turboModuleProxy != null;
+ 
+ export const SUPPORTED: ImplementationStatus = 'SUPPORTED';
+ export const USES_DEFAULT_IMPLEMENTATION: ImplementationStatus =
+@@ -87,6 +94,7 @@ export default function decorateMapComponent<Type extends Component>(
+   Component.prototype.getNativeComponent =
+     function getNativeComponent(): NativeComponent {
+       const provider = this.context;
+       if (
++        canUseFabricComponents &&
+         componentName === 'Marker' &&
+         (Platform.OS !== 'ios' || provider !== PROVIDER_GOOGLE)
+       ) {
+@@ -95,6 +103,7 @@ export default function decorateMapComponent<Type extends Component>(
+         return FabricMarker;
+       }
+       if (
++        canUseFabricComponents &&
+         componentName === 'Polygon' &&
+         ((provider === PROVIDER_GOOGLE &&
+           Platform.OS === 'ios' &&
+@@ -106,7 +115,7 @@ export default function decorateMapComponent<Type extends Component>(
+         // @ts-ignore
+         return GooglePolygon;
+       }
+-      if (Platform.OS === 'android') {
++      if (canUseFabricComponents && Platform.OS === 'android') {
+         if (componentName === 'Callout') {
+           // @ts-ignore
+           return FabricCallout;

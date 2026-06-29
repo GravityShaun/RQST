@@ -1,0 +1,4 @@
+packages:
+  - Mobile
+  - Desktop
+  - packages/*

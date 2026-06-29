@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rqst-api"
+version = "0.1.0"
+description = "RQST FastAPI backend"
+requires-python = ">=3.12"
+dependencies = [
+  "alembic>=1.13.2",
+  "argon2-cffi>=23.1.0",
+  "fastapi>=0.116.0",
+  "pydantic-settings>=2.3.4",
+  "pyjwt>=2.9.0",
+  "python-multipart>=0.0.9",
+  "sqlalchemy>=2.0.32",
+  "uvicorn[standard]>=0.30.1"
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.27.0",
+  "pytest>=8.3.2",
+  "pytest-asyncio>=0.23.8",
+  "ruff>=0.5.7"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["app/tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+

@@ -1,0 +1,26 @@
+{
+  "name": "rqst",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.7.0",
+  "workspaces": [
+    "Mobile",
+    "Desktop",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "pnpm --parallel --filter @rqst/mobile --filter @rqst/desktop dev",
+    "dev:mobile": "pnpm --filter @rqst/mobile dev",
+    "dev:desktop": "pnpm --filter @rqst/desktop dev",
+    "lint": "pnpm --filter @rqst/mobile lint && pnpm --filter @rqst/desktop lint",
+    "test": "pnpm --filter @rqst/mobile test && pnpm --filter @rqst/desktop test",
+    "contracts:generate": "pnpm --filter @rqst/contracts generate",
+    "bun:mobile:dev": "bunx --cwd Mobile expo start",
+    "bun:mobile:ios": "bunx --cwd Mobile expo run ios"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "react-native-maps@1.27.2": "patches/react-native-maps@1.27.2.patch"
+    }
+  }
+}
