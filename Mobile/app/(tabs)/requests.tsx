@@ -1,36 +1,300 @@
-import { startTransition, useDeferredValue, useState } from "react";
+import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { formatUsd } from "@rqst/shared-config";
 
 import { ScreenShell, SectionTitle, SurfaceCard, Tag, premiumTheme } from "../../src/components/premium-ui";
 import { activeSession, initialUserRequests, songLibrary } from "../../src/features/rqst/mock-data";
+import { unsplashImages } from "../../src/lib/unsplash";
 
-const quickAmounts = ["5", "8", "10", "15"];
+const quickAmounts = ["5", "10", "15"] as const;
+const customAmountValue = "custom";
+const apiBaseUrl = process.env.EXPO_PUBLIC_RQST_API_URL ?? "http://127.0.0.1:8000/api/v1";
+
+type SearchSong = {
+  result_type?: "song";
+  id: number | string;
+  title: string;
+  artist: string;
+  album?: string | null;
+  imageUri?: string | null;
+  album_art_url?: string | null;
+  external_source?: string;
+  popularity_score?: number;
+};
+
+type SearchArtist = {
+  result_type: "artist";
+  id: string;
+  name: string;
+  image_url?: string | null;
+  disambiguation?: string | null;
+  country?: string | null;
+  artist_type?: string | null;
+  external_source?: string;
+};
+
+type SearchResult = SearchSong | SearchArtist;
+
+function isSongResult(result: SearchResult): result is SearchSong {
+  return result.result_type !== "artist";
+}
+
+function isArtistResult(result: SearchResult): result is SearchArtist {
+  return result.result_type === "artist";
+}
+
+function getSongImageUri(song: SearchSong) {
+  return song.imageUri ?? song.album_art_url ?? unsplashImages.queueAccent;
+}
+
+function normalizeSearchValue(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function isSongByArtist(song: SearchSong, artistName: string) {
+  const songArtist = normalizeSearchValue(song.artist);
+  const selectedArtist = normalizeSearchValue(artistName);
+
+  return songArtist === selectedArtist || songArtist.includes(selectedArtist);
+}
+
+function getCanonicalSongTitle(title: string) {
+  return normalizeSearchValue(title)
+    .replace(/\s*\([^)]*(remix|edit|live|instrumental|karaoke|version|remaster|mix)[^)]*\)/g, "")
+    .replace(/\s*-[^-]*(remix|edit|live|instrumental|karaoke|version|remaster|mix).*$/g, "")
+    .trim();
+}
+
+function isMainSongVersion(song: SearchSong) {
+  const title = normalizeSearchValue(song.title);
+
+  return !/(\([^)]*(remix|edit|live|instrumental|karaoke|version|remaster|mix)[^)]*\)|-[^-]*(remix|edit|live|instrumental|karaoke|version|remaster|mix))/.test(title);
+}
+
+function getSongResultKey(song: SearchSong) {
+  return `${song.id}-${song.title}-${song.artist}`;
+}
 
 export default function RequestsScreen() {
   const [query, setQuery] = useState("");
-  const [amount, setAmount] = useState("10");
-  const [selectedSongId, setSelectedSongId] = useState(songLibrary[0]?.id ?? "");
+  const [selectedArtistName, setSelectedArtistName] = useState("");
+  const [selectedAlbumName, setSelectedAlbumName] = useState("");
+  const [selectedSongId, setSelectedSongId] = useState<number | string>("");
+  const [selectedAmount, setSelectedAmount] = useState<(typeof quickAmounts)[number] | typeof customAmountValue>("10");
+  const [customAmount, setCustomAmount] = useState("");
   const [requests, setRequests] = useState(initialUserRequests);
+  const [musicSearchResults, setMusicSearchResults] = useState<SearchResult[]>([]);
+  const [hasFetchedAppleMusic, setHasFetchedAppleMusic] = useState(false);
+  const [isSearchingSongs, setIsSearchingSongs] = useState(false);
+  const [songSearchError, setSongSearchError] = useState("");
 
   const deferredQuery = useDeferredValue(query);
-  const normalizedQuery = deferredQuery.trim().toLowerCase();
-  const bidCents = Math.max(Number(amount || 0), 0) * 100;
-  const filteredSongs = songLibrary.filter((song) => {
-    if (!normalizedQuery) {
-      return true;
+  const normalizedQuery = normalizeSearchValue(deferredQuery);
+  const selectedArtistQuery = normalizeSearchValue(selectedArtistName);
+  const localResults = useMemo<SearchResult[]>(() => {
+    const songs = songLibrary.filter((song) => {
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      return `${song.title} ${song.artist}`.toLowerCase().includes(normalizedQuery);
+    });
+    const artistMap = new Map<string, SearchArtist>();
+
+    songLibrary.forEach((song) => {
+      const key = song.artist.toLowerCase();
+      if (!artistMap.has(key) && (!normalizedQuery || song.artist.toLowerCase().includes(normalizedQuery))) {
+        artistMap.set(key, {
+          result_type: "artist",
+          id: `artist-${key}`,
+          name: song.artist,
+          image_url: song.imageUri,
+          artist_type: "Artist",
+          external_source: "local",
+        });
+      }
+    });
+
+    return [...artistMap.values(), ...songs.map((song) => ({ ...song, result_type: "song" as const }))];
+  }, [normalizedQuery]);
+  const shouldShowAppleMusicResults = normalizedQuery.length >= 2 && hasFetchedAppleMusic && !songSearchError;
+  const filteredResults = shouldShowAppleMusicResults ? musicSearchResults : localResults;
+  const filteredSongs = filteredResults.filter(isSongResult);
+  const artistFilteredSongs = selectedArtistQuery
+    ? filteredSongs.filter((song) => isSongByArtist(song, selectedArtistName))
+    : filteredSongs;
+  const artistMainSongs = artistFilteredSongs.filter(isMainSongVersion).reduce<SearchSong[]>((songs, song) => {
+    const canonicalTitle = getCanonicalSongTitle(song.title);
+    if (canonicalTitle && !songs.some((existingSong) => getCanonicalSongTitle(existingSong.title) === canonicalTitle)) {
+      songs.push(song);
     }
 
-    return `${song.title} ${song.artist}`.toLowerCase().includes(normalizedQuery);
-  });
+    return songs;
+  }, []);
+  const artistPopularSongs = artistMainSongs.slice(0, 10);
+  const artistAlbumSections = artistMainSongs.reduce<Array<{ album: string; songs: SearchSong[]; coverUri: string }>>(
+    (sections, song) => {
+      const album = song.album?.trim() || "Singles and other tracks";
+      const section = sections.find((item) => item.album === album);
 
-  const selectedSong =
-    filteredSongs.find((song) => song.id === selectedSongId) ??
-    songLibrary.find((song) => song.id === selectedSongId) ??
-    filteredSongs[0] ??
-    songLibrary[0];
+      if (section) {
+        section.songs.push(song);
+      } else {
+        sections.push({ album, songs: [song], coverUri: getSongImageUri(song) });
+      }
+
+      return sections;
+    },
+    [],
+  ).sort((left, right) => left.album.localeCompare(right.album));
+  const selectedAlbum = selectedAlbumName
+    ? artistAlbumSections.find((section) => section.album === selectedAlbumName)
+    : undefined;
+  const selectedSong = filteredSongs.find((song) => song.id === selectedSongId);
+  const topResult = normalizedQuery && !selectedArtistQuery ? filteredResults[0] : undefined;
+  const songResults = selectedArtistQuery
+    ? artistFilteredSongs
+    : filteredSongs.filter((song) => !topResult || !isSongResult(topResult) || song.id !== topResult.id);
+  const artistResults = selectedArtistQuery
+    ? []
+    : filteredResults.filter(isArtistResult).filter((artist) => !topResult || !isArtistResult(topResult) || artist.id !== topResult.id);
+  const hasVisibleResults = selectedArtistQuery ? artistFilteredSongs.length > 0 : filteredResults.length > 0;
+  const bidAmount = selectedAmount === customAmountValue ? customAmount : selectedAmount;
+  const bidCents = Math.max(Number(bidAmount || 0), 0) * 100;
   const canSubmit = Boolean(selectedSong) && Number.isFinite(bidCents) && bidCents >= activeSession.requestFloorCents;
+
+  useEffect(() => {
+    if (normalizedQuery.length < 2) {
+      setMusicSearchResults([]);
+      setHasFetchedAppleMusic(false);
+      setSongSearchError("");
+      setIsSearchingSongs(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setHasFetchedAppleMusic(false);
+    const searchTimeout = setTimeout(() => {
+      setIsSearchingSongs(true);
+      setSongSearchError("");
+
+      const resultLimit = selectedArtistName ? 25 : 12;
+      const searchUrl = `${apiBaseUrl}/songs/search?q=${encodeURIComponent(normalizedQuery)}&limit=${resultLimit}${
+        selectedArtistName ? `&artist=${encodeURIComponent(selectedArtistName)}` : ""
+      }`;
+
+      fetch(searchUrl, {
+        signal: controller.signal,
+      })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error("Song search failed");
+          }
+          return response.json() as Promise<SearchResult[]>;
+        })
+        .then((results) => {
+          setMusicSearchResults(results);
+          setHasFetchedAppleMusic(true);
+        })
+        .catch((error) => {
+          if (error.name !== "AbortError") {
+            setMusicSearchResults([]);
+            setHasFetchedAppleMusic(false);
+            setSongSearchError("Live search is offline. Showing local picks.");
+          }
+        })
+        .finally(() => setIsSearchingSongs(false));
+    }, 1000);
+
+    return () => {
+      controller.abort();
+      clearTimeout(searchTimeout);
+    };
+  }, [normalizedQuery, selectedArtistName]);
+
+  function handleSelectSong(songId: number | string) {
+    setSelectedSongId(songId);
+    if (selectedAmount === customAmountValue && !customAmount) {
+      setSelectedAmount("10");
+    }
+  }
+
+  function handleSelectArtist(artistName: string) {
+    setSelectedArtistName(artistName);
+    setSelectedAlbumName("");
+    setSelectedSongId("");
+    startTransition(() => setQuery(artistName));
+  }
+
+  function handleChangeQuery(text: string) {
+    setSelectedArtistName("");
+    setSelectedAlbumName("");
+    startTransition(() => setQuery(text));
+  }
+
+  function renderArtistResult(artist: SearchArtist, variant: "top" | "list" = "list") {
+    const imageUri = artist.image_url ?? unsplashImages.djPortrait;
+    const artistMeta = [artist.artist_type, artist.country, artist.disambiguation].filter(Boolean).join(" · ");
+
+    return (
+      <Pressable key={`artist-${artist.id}`} onPress={() => handleSelectArtist(artist.name)} style={styles.songResult}>
+        <View style={[styles.songCard, variant === "top" && styles.topResultCard]}>
+          <Image
+            source={{ uri: imageUri }}
+            style={[
+              styles.songImage,
+              styles.artistImage,
+              variant === "top" && styles.topResultImage,
+              variant === "top" && styles.topResultArtistImage,
+            ]}
+          />
+          <View style={styles.songCopy}>
+            <Text numberOfLines={1} style={[styles.songTitle, variant === "top" && styles.topResultTitle]}>
+              {artist.name}
+            </Text>
+            <Text numberOfLines={1} style={styles.songArtist}>
+              {artistMeta || "Artist"}
+            </Text>
+          </View>
+          <View style={styles.artistStatus}>
+            <Ionicons name="person" size={16} color={premiumTheme.colors.inkMuted} />
+          </View>
+        </View>
+      </Pressable>
+    );
+  }
+
+  function renderSongResult(song: SearchSong, variant: "top" | "list" = "list") {
+    const selected = selectedSong?.id === song.id;
+
+    return (
+      <Pressable key={song.id} onPress={() => handleSelectSong(song.id)} style={styles.songResult}>
+        <View style={[styles.songCard, variant === "top" && styles.topResultCard, selected && styles.songCardSelected]}>
+          <Image source={{ uri: getSongImageUri(song) }} style={[styles.songImage, variant === "top" && styles.topResultImage]} />
+          <View style={styles.songCopy}>
+            <Text numberOfLines={1} style={[styles.songTitle, variant === "top" && styles.topResultTitle]}>
+              {song.title}
+            </Text>
+            <Text numberOfLines={1} style={styles.songArtist}>
+              {song.album ? `${song.artist} · ${song.album}` : song.artist}
+            </Text>
+          </View>
+          <View style={[styles.songStatus, selected && styles.songStatusSelected]}>
+            <Ionicons
+              name={selected ? "checkmark" : song.external_source === "apple_music" ? "musical-notes" : "add"}
+              size={17}
+              color={selected ? premiumTheme.colors.text : premiumTheme.colors.inkMuted}
+            />
+          </View>
+        </View>
+      </Pressable>
+    );
+  }
 
   function handleAddMoney(requestId: string) {
     setRequests((current) =>
@@ -70,6 +334,7 @@ export default function RequestsScreen() {
         id: `request-${Date.now()}`,
         title: selectedSong.title,
         artist: selectedSong.artist,
+        imageUri: getSongImageUri(selectedSong),
         venue: activeSession.venue,
         totalCents: bidCents,
         myContributionCents: bidCents,
@@ -79,86 +344,211 @@ export default function RequestsScreen() {
       ...current,
     ]);
     setQuery("");
+    setSelectedSongId("");
+    setSelectedAmount("10");
+    setCustomAmount("");
   }
 
   return (
-    <ScreenShell>
-      <View style={styles.topRow}>
-        <View>
-          <Text style={styles.eyebrow}>Send a request</Text>
-          <Text style={styles.title}>What should play?</Text>
-        </View>
+    <ScreenShell contentContainerStyle={styles.content}>
+      <View style={styles.searchHeader}>
+        <Text style={styles.searchLabel}>search songs and place bids</Text>
         <Tag label={`Min ${formatUsd(activeSession.requestFloorCents)}`} tone="gold" icon="wallet-outline" />
       </View>
 
-      <SurfaceCard style={styles.composerCard}>
-        <View style={styles.progressRow}>
-          <View style={styles.progressActive} />
-          <View style={styles.progressActive} />
-          <View style={styles.progressInactive} />
-        </View>
+      <View style={styles.searchBar}>
+        <Ionicons name="search" size={18} color={premiumTheme.colors.inkMuted} />
+        <TextInput
+          value={query}
+          onChangeText={handleChangeQuery}
+          placeholder="Search by song or artist"
+          placeholderTextColor="#8F9099"
+          style={styles.searchInput}
+        />
+      </View>
 
-        <Text style={styles.composerTitle}>Search songs and place your bid</Text>
-        <Text style={styles.composerSubtitle}>{`${activeSession.djName} is live at ${activeSession.venue}.`}</Text>
+      <Text style={styles.sessionNote}>{`${activeSession.djName} is live at ${activeSession.venue}.`}</Text>
+      {isSearchingSongs ? <Text style={styles.sessionNote}>Searching Apple Music...</Text> : null}
+      {shouldShowAppleMusicResults ? (
+        <Text style={styles.sessionNote}>{`${musicSearchResults.length} Apple Music result${
+          musicSearchResults.length === 1 ? "" : "s"
+        }`}</Text>
+      ) : null}
+      {songSearchError ? <Text style={styles.searchError}>{songSearchError}</Text> : null}
 
-        <View style={styles.inputWrap}>
-          <Ionicons name="search" size={18} color={premiumTheme.colors.muted} />
-          <TextInput
-            value={query}
-            onChangeText={(text) => startTransition(() => setQuery(text))}
-            placeholder="Artist or song"
-            placeholderTextColor="#8F9099"
-            style={styles.input}
-          />
-        </View>
+      <View style={styles.songList}>
+        {selectedArtistName ? (
+          <View style={styles.resultSection}>
+            <Text style={styles.artistPageTitle}>{selectedArtistName}</Text>
 
-        <View style={styles.songGrid}>
-          {filteredSongs.slice(0, 6).map((song, index) => {
-            const selected = selectedSong?.id === song.id;
+            {selectedAlbum ? (
+              <View style={styles.albumSongSection}>
+                <Pressable onPress={() => setSelectedAlbumName("")} style={styles.albumBackButton}>
+                  <Ionicons name="chevron-back" size={16} color={premiumTheme.colors.inkMuted} />
+                  <Text style={styles.albumBackText}>Albums</Text>
+                </Pressable>
+                <View style={styles.albumDetailHeader}>
+                  <Image source={{ uri: selectedAlbum.coverUri }} style={styles.albumDetailImage} />
+                  <View style={styles.albumDetailCopy}>
+                    <Text numberOfLines={2} style={styles.albumDetailTitle}>
+                      {selectedAlbum.album}
+                    </Text>
+                    <Text style={styles.albumDetailSubtitle}>{`${selectedAlbum.songs.length} song${
+                      selectedAlbum.songs.length === 1 ? "" : "s"
+                    }`}</Text>
+                  </View>
+                </View>
+                {selectedAlbum.songs.map((song) => renderSongResult(song))}
+              </View>
+            ) : (
+              <>
+                <Text style={styles.resultSectionTitle}>Popular</Text>
+                {artistPopularSongs.map((song, index) => (
+                  <View key={getSongResultKey(song)} style={styles.popularSongRow}>
+                    <Text style={styles.popularRank}>{index + 1}</Text>
+                    <View style={styles.popularSongContent}>{renderSongResult(song)}</View>
+                  </View>
+                ))}
 
-            return (
-              <Pressable
-                key={song.id}
-                onPress={() => setSelectedSongId(song.id)}
-                style={[styles.songChip, selected && styles.songChipSelected, index % 3 === 0 && styles.songChipWide]}
+                <Text style={styles.resultSectionTitle}>Albums</Text>
+                <View style={styles.albumGrid}>
+                  {artistAlbumSections.map((section) => (
+                    <Pressable
+                      key={section.album}
+                      onPress={() => setSelectedAlbumName(section.album)}
+                      style={styles.albumTile}
+                    >
+                      <Image source={{ uri: section.coverUri }} style={styles.albumTileImage} />
+                      <Text numberOfLines={2} style={styles.albumTileTitle}>
+                        {section.album}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            )}
+          </View>
+        ) : null}
+
+        {!selectedArtistName && topResult ? (
+          <View style={styles.resultSection}>
+            <Text style={styles.resultSectionTitle}>Top result</Text>
+            {isSongResult(topResult) ? renderSongResult(topResult, "top") : renderArtistResult(topResult, "top")}
+          </View>
+        ) : null}
+
+        {!selectedArtistName && songResults.length ? (
+          <View style={styles.resultSection}>
+            <Text style={styles.resultSectionTitle}>{selectedArtistName || "Songs"}</Text>
+            {songResults.map((song) => renderSongResult(song))}
+          </View>
+        ) : null}
+
+        {artistResults.length ? (
+          <View style={styles.resultSection}>
+            <Text style={styles.resultSectionTitle}>Artists</Text>
+            {artistResults.map((artist) => renderArtistResult(artist))}
+          </View>
+        ) : null}
+      </View>
+
+      {!hasVisibleResults ? (
+        <SurfaceCard style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>No results found</Text>
+          <Text style={styles.emptySubtitle}>
+            {selectedArtistName
+              ? `No songs found for ${selectedArtistName}.`
+              : "Try a different artist, title, or a shorter search."}
+          </Text>
+        </SurfaceCard>
+      ) : null}
+
+      {selectedSong ? (
+        <SurfaceCard style={styles.bidCard}>
+          <View style={styles.bidHeader}>
+            <View style={styles.bidHeaderCopy}>
+              <Text style={styles.bidTitle}>Choose an amount</Text>
+              <Text style={styles.bidSubtitle}>{`${selectedSong.title} · ${selectedSong.artist}`}</Text>
+            </View>
+            <Image source={{ uri: getSongImageUri(selectedSong) }} style={styles.bidImage} />
+          </View>
+
+          <View style={styles.amountRow}>
+            {quickAmounts.map((value) => {
+              const selected = selectedAmount === value;
+
+              return (
+                <Pressable
+                  key={value}
+                  onPress={() => setSelectedAmount(value)}
+                  style={[styles.amountChip, selected && styles.amountChipSelected]}
+                >
+                  <Text style={[styles.amountChipText, selected && styles.amountChipTextSelected]}>{`$${value}`}</Text>
+                </Pressable>
+              );
+            })}
+            <Pressable
+              onPress={() => setSelectedAmount(customAmountValue)}
+              style={[styles.amountChip, selectedAmount === customAmountValue && styles.amountChipSelected]}
+            >
+              <Text
+                style={[
+                  styles.amountChipText,
+                  selectedAmount === customAmountValue && styles.amountChipTextSelected,
+                ]}
               >
-                <Text style={[styles.songChipTitle, selected && styles.songChipTitleSelected]}>{song.title}</Text>
-                <Text style={[styles.songChipArtist, selected && styles.songChipArtistSelected]}>{song.artist}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+                Custom
+              </Text>
+            </Pressable>
+          </View>
 
-        <Text style={styles.amountTitle}>Choose your amount</Text>
-        <View style={styles.amountRow}>
-          {quickAmounts.map((value) => {
-            const selected = amount === value;
-            return (
-              <Pressable
-                key={value}
-                onPress={() => setAmount(value)}
-                style={[styles.amountChip, selected && styles.amountChipSelected]}
-              >
-                <Text style={[styles.amountChipText, selected && styles.amountChipTextSelected]}>{`$${value}`}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+          {selectedAmount === customAmountValue ? (
+            <View style={styles.customInputWrap}>
+              <Text style={styles.customPrefix}>$</Text>
+              <TextInput
+                value={customAmount}
+                onChangeText={setCustomAmount}
+                keyboardType="numeric"
+                placeholder="Enter amount"
+                placeholderTextColor="#8F9099"
+                style={styles.customInput}
+              />
+            </View>
+          ) : null}
 
-        <Pressable disabled={!canSubmit} onPress={handleSubmitRequest} style={[styles.cta, !canSubmit && styles.ctaDisabled]}>
-          <Text style={styles.ctaText}>Send request</Text>
-          <Ionicons name="arrow-forward" size={18} color={premiumTheme.colors.background} />
-        </Pressable>
-      </SurfaceCard>
+          <Text style={styles.floorCopy}>
+            {canSubmit
+              ? `Your bid: ${formatUsd(bidCents)}`
+              : `Minimum bid is ${formatUsd(activeSession.requestFloorCents)}`}
+          </Text>
+
+          <Pressable
+            disabled={!canSubmit}
+            onPress={handleSubmitRequest}
+            style={[styles.cta, !canSubmit && styles.ctaDisabled]}
+          >
+            <Text style={styles.ctaText}>Place bid</Text>
+            <Ionicons name="arrow-forward" size={18} color={premiumTheme.colors.background} />
+          </Pressable>
+        </SurfaceCard>
+      ) : null}
 
       <SectionTitle title="My requests" subtitle="Add money to open songs or cancel while they are still eligible." />
       <View style={styles.requestList}>
         {requests.map((request) => (
           <SurfaceCard key={request.id}>
             <View style={styles.requestTop}>
-              <View>
-                <Text style={styles.requestTitle}>{request.title}</Text>
-                <Text style={styles.requestSubtitle}>{`${request.artist} · ${request.venue}`}</Text>
+              <View style={styles.requestTitleWrap}>
+                <Image
+                  source={{
+                    uri: request.imageUri ?? songLibrary.find((song) => song.title === request.title)?.imageUri ?? unsplashImages.queueAccent,
+                  }}
+                  style={styles.requestImage}
+                />
+                <View>
+                  <Text style={styles.requestTitle}>{request.title}</Text>
+                  <Text style={styles.requestSubtitle}>{`${request.artist} · ${request.venue}`}</Text>
+                </View>
               </View>
               <Tag
                 label={request.status}
@@ -195,53 +585,156 @@ export default function RequestsScreen() {
 const styles = StyleSheet.create({
   amountChip: {
     alignItems: "center",
-    backgroundColor: "#484B5E",
+    backgroundColor: premiumTheme.colors.backgroundSecondary,
+    borderColor: premiumTheme.colors.border,
     borderRadius: 999,
+    borderWidth: 1,
     justifyContent: "center",
-    minWidth: 66,
+    minWidth: 70,
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
   amountChipSelected: {
-    backgroundColor: "#A7E6F7",
+    backgroundColor: premiumTheme.colors.coral,
+    borderColor: premiumTheme.colors.coral,
   },
   amountChipText: {
-    color: premiumTheme.colors.text,
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 15,
     fontWeight: "700",
   },
   amountChipTextSelected: {
-    color: premiumTheme.colors.background,
+    color: premiumTheme.colors.text,
   },
   amountRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
   },
-  amountTitle: {
-    color: premiumTheme.colors.text,
-    fontSize: 16,
-    fontWeight: "700",
-    marginTop: 4,
+  albumBackButton: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingTop: 12,
   },
-  composerCard: {
-    backgroundColor: "#343748",
+  albumBackText: {
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  albumDetailCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  albumDetailHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    padding: 12,
+  },
+  albumDetailImage: {
+    borderRadius: 10,
+    height: 72,
+    width: 72,
+  },
+  albumDetailSubtitle: {
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  albumDetailTitle: {
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.display,
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  albumGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    columnGap: 8,
+    rowGap: 12,
+    padding: 12,
+    paddingTop: 6,
+  },
+  albumSongSection: {
+    paddingBottom: 6,
+  },
+  albumTile: {
+    gap: 5,
+    width: "31.5%",
+  },
+  albumTileImage: {
+    aspectRatio: 1,
+    borderRadius: 10,
+    width: "100%",
+  },
+  albumTileTitle: {
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.body,
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 14,
+  },
+  artistImage: {
+    borderRadius: 23,
+  },
+  artistPageTitle: {
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.display,
+    fontSize: 22,
+    fontWeight: "800",
+    paddingHorizontal: 12,
+    paddingTop: 14,
+  },
+  artistStatus: {
+    alignItems: "center",
+    backgroundColor: premiumTheme.colors.backgroundSecondary,
+    borderRadius: 999,
+    height: 32,
+    justifyContent: "center",
+    width: 32,
+  },
+  bidCard: {
     gap: 16,
   },
-  composerSubtitle: {
-    color: premiumTheme.colors.muted,
-    fontSize: 14,
+  bidHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 14,
+    justifyContent: "space-between",
   },
-  composerTitle: {
-    color: premiumTheme.colors.text,
-    fontSize: 32,
+  bidHeaderCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  bidImage: {
+    borderRadius: 14,
+    height: 64,
+    width: 64,
+  },
+  bidSubtitle: {
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
+    fontSize: 13,
+  },
+  bidTitle: {
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.display,
+    fontSize: 22,
     fontWeight: "800",
-    lineHeight: 36,
+  },
+  content: {
+    gap: 16,
+    paddingBottom: 112,
   },
   cta: {
     alignItems: "center",
     alignSelf: "stretch",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: premiumTheme.colors.coral,
     borderRadius: 999,
     flexDirection: "row",
     gap: 8,
@@ -249,19 +742,57 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   ctaDisabled: {
-    backgroundColor: "#9494A1",
+    backgroundColor: "#B9B3AE",
   },
   ctaText: {
-    color: premiumTheme.colors.background,
+    color: premiumTheme.colors.text,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 16,
     fontWeight: "800",
   },
-  eyebrow: {
-    color: premiumTheme.colors.muted,
-    fontSize: 12,
+  customInput: {
+    color: premiumTheme.colors.ink,
+    flex: 1,
+    fontFamily: premiumTheme.fonts.body,
+    fontSize: 18,
     fontWeight: "700",
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
+    paddingVertical: 14,
+  },
+  customInputWrap: {
+    alignItems: "center",
+    backgroundColor: premiumTheme.colors.backgroundSecondary,
+    borderColor: premiumTheme.colors.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 16,
+  },
+  customPrefix: {
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  emptyState: {
+    gap: 6,
+  },
+  emptySubtitle: {
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
+    fontSize: 14,
+  },
+  emptyTitle: {
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.display,
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  floorCopy: {
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
+    fontSize: 13,
+    fontWeight: "600",
   },
   ghostButton: {
     alignItems: "center",
@@ -274,49 +805,42 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   ghostButtonText: {
-    color: premiumTheme.colors.text,
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 14,
     fontWeight: "700",
   },
-  input: {
-    color: premiumTheme.colors.text,
-    flex: 1,
-    fontSize: 15,
+  popularRank: {
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
+    fontSize: 13,
+    fontWeight: "800",
+    textAlign: "center",
+    width: 24,
   },
-  inputWrap: {
+  popularSongContent: {
+    flex: 1,
+  },
+  popularSongRow: {
     alignItems: "center",
-    backgroundColor: "#45495D",
-    borderRadius: 18,
     flexDirection: "row",
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
-  progressActive: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 999,
-    flex: 1,
-    height: 4,
-  },
-  progressInactive: {
-    backgroundColor: "#4A4C5A",
-    borderRadius: 999,
-    flex: 1,
-    height: 4,
-  },
-  progressRow: {
-    flexDirection: "row",
-    gap: 10,
+    paddingLeft: 8,
   },
   requestButtons: {
     flexDirection: "row",
     gap: 10,
   },
+  requestImage: {
+    borderRadius: 14,
+    height: 56,
+    width: 56,
+  },
   requestList: {
     gap: 14,
   },
   requestMeta: {
-    color: premiumTheme.colors.muted,
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 13,
     fontWeight: "600",
   },
@@ -325,22 +849,84 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   requestSubtitle: {
-    color: premiumTheme.colors.muted,
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 13,
   },
   requestTitle: {
-    color: premiumTheme.colors.text,
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.display,
     fontSize: 20,
     fontWeight: "700",
+  },
+  requestTitleWrap: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
   },
   requestTop: {
     alignItems: "flex-start",
     flexDirection: "row",
     justifyContent: "space-between",
   },
+  resultSection: {
+    borderBottomColor: premiumTheme.colors.border,
+    borderBottomWidth: 1,
+    paddingBottom: 6,
+  },
+  resultSectionTitle: {
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.display,
+    fontSize: 18,
+    fontWeight: "800",
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 4,
+  },
+  searchBar: {
+    alignItems: "center",
+    backgroundColor: premiumTheme.colors.surfaceElevated,
+    borderColor: premiumTheme.colors.border,
+    borderRadius: 20,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  searchHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  searchInput: {
+    color: premiumTheme.colors.ink,
+    flex: 1,
+    fontFamily: premiumTheme.fonts.body,
+    fontSize: 16,
+  },
+  searchError: {
+    color: premiumTheme.colors.coral,
+    fontFamily: premiumTheme.fonts.body,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  searchLabel: {
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "lowercase",
+  },
+  sessionNote: {
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
+    fontSize: 13,
+  },
   smallButton: {
     alignItems: "center",
-    backgroundColor: premiumTheme.colors.text,
+    backgroundColor: premiumTheme.colors.coral,
     borderRadius: 999,
     justifyContent: "center",
     minWidth: 96,
@@ -352,53 +938,82 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   smallButtonText: {
-    color: premiumTheme.colors.background,
+    color: premiumTheme.colors.text,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 14,
     fontWeight: "700",
   },
-  songChip: {
-    backgroundColor: "#4A4D60",
-    borderRadius: 22,
-    gap: 4,
-    padding: 14,
-    width: "48%",
-  },
-  songChipArtist: {
-    color: premiumTheme.colors.muted,
+  songArtist: {
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 12,
   },
-  songChipArtistSelected: {
-    color: premiumTheme.colors.background,
+  songCard: {
+    alignItems: "center",
+    backgroundColor: premiumTheme.colors.surfaceElevated,
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 66,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
-  songChipSelected: {
-    backgroundColor: "#A7E6F7",
+  songCardSelected: {
+    backgroundColor: "rgba(224, 90, 71, 0.08)",
   },
-  songChipTitle: {
-    color: premiumTheme.colors.text,
+  songCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  songImage: {
+    borderRadius: 8,
+    height: 46,
+    width: 46,
+  },
+  songList: {
+    backgroundColor: premiumTheme.colors.surfaceElevated,
+    borderColor: premiumTheme.colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  songResult: {
+    borderRadius: 0,
+  },
+  songStatus: {
+    alignItems: "center",
+    backgroundColor: premiumTheme.colors.backgroundSecondary,
+    borderRadius: 999,
+    height: 32,
+    justifyContent: "center",
+    width: 32,
+  },
+  songStatusSelected: {
+    backgroundColor: premiumTheme.colors.coral,
+  },
+  songTitle: {
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 15,
     fontWeight: "700",
   },
-  songChipTitleSelected: {
-    color: premiumTheme.colors.background,
+  topResultCard: {
+    gap: 12,
+    minHeight: 84,
+    paddingBottom: 12,
+    paddingTop: 10,
   },
-  songChipWide: {
-    width: "100%",
+  topResultImage: {
+    borderRadius: 12,
+    height: 60,
+    width: 60,
   },
-  songGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
+  topResultArtistImage: {
+    borderRadius: 30,
   },
-  title: {
-    color: premiumTheme.colors.text,
-    fontSize: 34,
+  topResultTitle: {
+    fontFamily: premiumTheme.fonts.display,
+    fontSize: 19,
     fontWeight: "800",
-    lineHeight: 38,
-    marginTop: 6,
-  },
-  topRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
   },
 });

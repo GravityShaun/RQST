@@ -19,9 +19,10 @@ class Settings(BaseSettings):
     polar_webhook_secret: str = "polar-dev-secret"
     platform_fee_bps: int = 1200
     currency: str = "USD"
+    apple_music_developer_token: str | None = None
+    apple_music_storefront: str = "us"
 
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

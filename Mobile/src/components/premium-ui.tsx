@@ -1,8 +1,7 @@
 import type { ComponentProps, PropsWithChildren, ReactNode } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
-import { Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
+import { ImageBackground, Platform, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { formatUsd } from "@rqst/shared-config";
 
@@ -11,26 +10,40 @@ export type PremiumTone = "gold" | "mint" | "coral" | "slate";
 
 export const premiumTheme = {
   colors: {
-    background: "#171821",
-    backgroundSecondary: "#202231",
-    surface: "#272938",
-    surfaceElevated: "#323547",
-    surfaceMuted: "#3D4156",
-    border: "rgba(255,255,255,0.10)",
-    text: "#F7F3EF",
-    muted: "#C0BDC8",
-    gold: "#E6B89B",
-    mint: "#ABEAD5",
-    coral: "#E09A81",
-    slate: "#C2ABFA",
-    ringPink: "#EF2DA8",
-    ringGold: "#F6B734",
+    background: "#D7DBDE",
+    backgroundSecondary: "#E8EAEC",
+    surface: "#F1F1F0",
+    surfaceElevated: "#FFFFFF",
+    surfaceMuted: "#D3D0CC",
+    border: "rgba(47, 36, 36, 0.08)",
+    text: "#FFF9F7",
+    muted: "rgba(255,249,247,0.74)",
+    ink: "#1E1717",
+    inkMuted: "rgba(30,23,23,0.56)",
+    gold: "#F3C6A6",
+    mint: "#ABDCCF",
+    coral: "#E05A47",
+    slate: "#E5A4A4",
+    ringPink: "#D84646",
+    ringGold: "#F2B9A8",
   },
   radii: {
     sm: 16,
     md: 24,
     lg: 32,
     xl: 40,
+  },
+  fonts: {
+    display: Platform.select({
+      ios: "Avenir Next",
+      android: "sans-serif-medium",
+      default: "System",
+    }),
+    body: Platform.select({
+      ios: "Avenir Next",
+      android: "sans-serif",
+      default: "System",
+    }),
   },
 } as const;
 
@@ -46,36 +59,36 @@ const toneStyles: Record<
   }
 > = {
   gold: {
-    solidBackground: "#D6A27F",
-    solidBorder: "rgba(255,255,255,0.10)",
+    solidBackground: "#F2C6A6",
+    solidBorder: "rgba(255,255,255,0.24)",
     solidInk: "#FFF7F1",
-    chipBackground: "rgba(230, 184, 155, 0.16)",
-    chipBorder: "rgba(230, 184, 155, 0.36)",
-    chipInk: "#F1D0BB",
+    chipBackground: "rgba(242, 198, 166, 0.18)",
+    chipBorder: "rgba(242, 198, 166, 0.34)",
+    chipInk: "#AE5A33",
   },
   mint: {
-    solidBackground: "#93D6BF",
-    solidBorder: "rgba(255,255,255,0.10)",
-    solidInk: "#08100E",
-    chipBackground: "rgba(171, 234, 213, 0.16)",
-    chipBorder: "rgba(171, 234, 213, 0.36)",
-    chipInk: "#D2FFF1",
+    solidBackground: "#A9D9CF",
+    solidBorder: "rgba(255,255,255,0.18)",
+    solidInk: "#183630",
+    chipBackground: "rgba(169, 217, 207, 0.20)",
+    chipBorder: "rgba(169, 217, 207, 0.34)",
+    chipInk: "#225C4D",
   },
   coral: {
-    solidBackground: "#CA806A",
-    solidBorder: "rgba(255,255,255,0.10)",
+    solidBackground: "#E05A47",
+    solidBorder: "rgba(255,255,255,0.16)",
     solidInk: "#FFF3EE",
-    chipBackground: "rgba(224, 154, 129, 0.16)",
-    chipBorder: "rgba(224, 154, 129, 0.34)",
-    chipInk: "#F5C6B7",
+    chipBackground: "rgba(224, 90, 71, 0.14)",
+    chipBorder: "rgba(224, 90, 71, 0.28)",
+    chipInk: "#B73524",
   },
   slate: {
-    solidBackground: "#AE93EA",
-    solidBorder: "rgba(255,255,255,0.10)",
+    solidBackground: "#E2AAB1",
+    solidBorder: "rgba(255,255,255,0.18)",
     solidInk: "#FFF7FF",
-    chipBackground: "rgba(194, 171, 250, 0.16)",
-    chipBorder: "rgba(194, 171, 250, 0.36)",
-    chipInk: "#E3D5FF",
+    chipBackground: "rgba(226, 170, 177, 0.18)",
+    chipBorder: "rgba(226, 170, 177, 0.30)",
+    chipInk: "#A3485B",
   },
 };
 
@@ -93,8 +106,19 @@ function getStatusTone(status: string): PremiumTone {
 function AccentPattern({ color = "rgba(255,255,255,0.12)" }: { color?: string }) {
   return (
     <View pointerEvents="none" style={styles.patternWrap}>
-      <View style={[styles.patternLoopOne, { borderColor: color }]} />
-      <View style={[styles.patternLoopTwo, { borderColor: color }]} />
+      <View style={[styles.patternOutlineOne, { borderColor: color }]} />
+      <View style={[styles.patternOutlineTwo, { borderColor: color }]} />
+      <View style={[styles.patternOutlineThree, { borderColor: color }]} />
+      <View style={styles.patternNoise} />
+    </View>
+  );
+}
+
+function BackgroundTexture() {
+  return (
+    <View pointerEvents="none" style={styles.backgroundTexture}>
+      <View style={styles.backgroundNoise} />
+      <View style={styles.backgroundCrosshatch} />
     </View>
   );
 }
@@ -103,23 +127,22 @@ export function ScreenShell({
   children,
   contentContainerStyle,
 }: PropsWithChildren<{ contentContainerStyle?: StyleProp<ViewStyle> }>) {
-  const insets = useSafeAreaInsets();
-
   return (
-    <View style={styles.screen}>
-      <StatusBar barStyle="light-content" />
+    <SafeAreaView style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <BackgroundTexture />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: insets.top + 12 },
+          styles.scrollContentTop,
           contentContainerStyle,
         ]}
         showsVerticalScrollIndicator={false}
       >
         {children}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -153,6 +176,7 @@ export function HeroPanel({
   actionLabel,
   metrics,
   chips,
+  imageUri,
 }: {
   eyebrow: string;
   title: string;
@@ -160,13 +184,14 @@ export function HeroPanel({
   actionLabel: string;
   metrics: ReadonlyArray<{ label: string; value: string }>;
   chips?: ReadonlyArray<string>;
+  imageUri?: string;
 }) {
-  return (
-    <View style={styles.heroPanel}>
+  const content = (
+    <View style={styles.heroPanelInner}>
       <AccentPattern />
       <View style={styles.heroTopRow}>
         <Tag label={eyebrow} tone="gold" icon="sparkles-outline" />
-        <Tag label="Live now" tone="slate" icon="radio-outline" />
+        <Tag label="Live now" tone="coral" icon="radio-outline" />
       </View>
       <Text style={styles.heroTitle}>{title}</Text>
       <Text style={styles.heroSubtitle}>{subtitle}</Text>
@@ -187,6 +212,17 @@ export function HeroPanel({
       ) : null}
       <RoundedButton label={actionLabel} icon="arrow-forward" />
     </View>
+  );
+
+  if (!imageUri) {
+    return <View style={styles.heroPanel}>{content}</View>;
+  }
+
+  return (
+    <ImageBackground source={{ uri: imageUri }} imageStyle={styles.heroImage} style={styles.heroPanel}>
+      <View style={styles.heroOverlay} />
+      {content}
+    </ImageBackground>
   );
 }
 
@@ -213,7 +249,7 @@ export function RoundedButton({
     >
       <View style={styles.roundedButtonRing} />
       <Text style={styles.roundedButtonText}>{label}</Text>
-      {icon ? <Ionicons name={icon} size={17} color={premiumTheme.colors.text} /> : null}
+      {icon ? <Ionicons name={icon} size={17} color={premiumTheme.colors.ink} /> : null}
     </Pressable>
   );
 }
@@ -313,11 +349,15 @@ export function SearchField({
   return (
     <View style={styles.searchField}>
       <View style={styles.searchIcon}>
-        <Ionicons name={icon} size={18} color={premiumTheme.colors.text} />
+        <Ionicons name={icon} size={18} color={premiumTheme.colors.ink} />
       </View>
       <View style={styles.searchCopy}>
-        <Text style={styles.searchLabel}>{label}</Text>
-        <Text style={styles.searchValue}>{value}</Text>
+        <Text numberOfLines={1} style={styles.searchLabel}>
+          {label}
+        </Text>
+        <Text numberOfLines={1} style={styles.searchValue}>
+          {value}
+        </Text>
       </View>
       <View style={styles.searchAction}>
         <Ionicons name="options-outline" size={18} color={premiumTheme.colors.muted} />
@@ -460,6 +500,7 @@ export function VenueCard({
   requestFloorCents,
   distance,
   energy,
+  imageUri,
   tags,
   tone = "slate",
 }: {
@@ -468,21 +509,13 @@ export function VenueCard({
   requestFloorCents: number;
   distance: string;
   energy: number;
+  imageUri?: string;
   tags: ReadonlyArray<string>;
   tone?: PremiumTone;
 }) {
   const toneStyle = toneStyles[tone];
-
-  return (
-    <View
-      style={[
-        styles.venueCard,
-        {
-          backgroundColor: toneStyle.solidBackground,
-          borderColor: toneStyle.solidBorder,
-        },
-      ]}
-    >
+  const content = (
+    <View style={styles.venueCardContent}>
       <AccentPattern color="rgba(255,255,255,0.16)" />
       <View style={styles.cardTopRow}>
         <Tag label="Live" tone={tone} icon="radio-outline" />
@@ -507,6 +540,29 @@ export function VenueCard({
         ))}
       </View>
     </View>
+  );
+
+  if (!imageUri) {
+    return (
+      <View
+        style={[
+          styles.venueCard,
+          {
+            backgroundColor: toneStyle.solidBackground,
+            borderColor: toneStyle.solidBorder,
+          },
+        ]}
+      >
+        {content}
+      </View>
+    );
+  }
+
+  return (
+    <ImageBackground source={{ uri: imageUri }} imageStyle={styles.venueImage} style={[styles.venueCard, { borderColor: toneStyle.solidBorder }]}>
+      <View style={[styles.venueImageOverlay, { backgroundColor: `${toneStyle.solidBackground}D8` }]} />
+      {content}
+    </ImageBackground>
   );
 }
 
@@ -647,18 +703,34 @@ export function ToggleRow({
 }
 
 const styles = StyleSheet.create({
+  backgroundCrosshatch: {
+    ...StyleSheet.absoluteFillObject,
+    borderColor: "rgba(255,255,255,0.30)",
+    borderTopWidth: 1,
+    opacity: 0.28,
+  },
+  backgroundNoise: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.32)",
+    opacity: 0.3,
+  },
+  backgroundTexture: {
+    ...StyleSheet.absoluteFillObject,
+  },
   cardStatRow: {
     flexDirection: "row",
     gap: 16,
     justifyContent: "space-between",
   },
   cardSubtitle: {
-    color: premiumTheme.colors.muted,
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 14,
     lineHeight: 20,
   },
   cardTitle: {
-    color: premiumTheme.colors.text,
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.display,
     fontSize: 22,
     fontWeight: "700",
     lineHeight: 28,
@@ -669,15 +741,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   eyebrow: {
-    color: premiumTheme.colors.muted,
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 1.4,
     textTransform: "uppercase",
   },
   featureTile: {
+    backgroundColor: "#FFB79A",
     borderRadius: premiumTheme.radii.lg,
-    borderWidth: 1,
+    borderWidth: 1.5,
     flex: 1,
     gap: 10,
     minHeight: 164,
@@ -686,23 +760,28 @@ const styles = StyleSheet.create({
   },
   featureTileIcon: {
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.14)",
+    backgroundColor: "rgba(255,255,255,0.12)",
     borderRadius: 16,
+    borderColor: "rgba(255,255,255,0.14)",
+    borderWidth: 1,
     height: 38,
     justifyContent: "center",
     width: 38,
   },
   featureTileSubtitle: {
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 13,
     lineHeight: 18,
     opacity: 0.9,
   },
   featureTileTitle: {
+    fontFamily: premiumTheme.fonts.display,
     fontSize: 20,
     fontWeight: "700",
     lineHeight: 24,
   },
   featureTileValue: {
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 14,
     fontWeight: "700",
     marginTop: "auto",
@@ -718,12 +797,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   headerSubtitle: {
-    color: premiumTheme.colors.muted,
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 14,
     lineHeight: 20,
   },
   headerTitle: {
-    color: premiumTheme.colors.text,
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.display,
     fontSize: 34,
     fontWeight: "800",
     lineHeight: 40,
@@ -732,18 +813,22 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   heroMetric: {
-    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderColor: "rgba(255,255,255,0.18)",
     borderRadius: 20,
+    borderWidth: 1,
     flex: 1,
     gap: 4,
     padding: 12,
   },
   heroMetricLabel: {
     color: "rgba(255,255,255,0.74)",
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 11,
   },
   heroMetricValue: {
     color: premiumTheme.colors.text,
+    fontFamily: premiumTheme.fonts.display,
     fontSize: 18,
     fontWeight: "700",
   },
@@ -752,21 +837,37 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   heroPanel: {
-    backgroundColor: "#AD8FE9",
-    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "#D8614F",
+    borderColor: "rgba(255,255,255,0.24)",
     borderRadius: premiumTheme.radii.xl,
-    borderWidth: 1,
-    gap: 16,
+    borderWidth: 1.5,
     overflow: "hidden",
+    shadowColor: "#50606E",
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.18,
+    shadowRadius: 30,
+  },
+  heroPanelInner: {
+    gap: 16,
+    minHeight: 260,
     padding: 22,
+  },
+  heroImage: {
+    borderRadius: premiumTheme.radii.xl,
+  },
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(216, 97, 79, 0.46)",
   },
   heroSubtitle: {
     color: "rgba(255,255,255,0.82)",
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 14,
     lineHeight: 20,
   },
   heroTitle: {
     color: premiumTheme.colors.text,
+    fontFamily: premiumTheme.fonts.display,
     fontSize: 30,
     fontWeight: "800",
     lineHeight: 34,
@@ -779,10 +880,10 @@ const styles = StyleSheet.create({
   },
   insightBanner: {
     alignItems: "center",
-    backgroundColor: premiumTheme.colors.surfaceElevated,
+    backgroundColor: "#F2EEEA",
     borderColor: premiumTheme.colors.border,
     borderRadius: premiumTheme.radii.md,
-    borderWidth: 1,
+    borderWidth: 1.5,
     flexDirection: "row",
     gap: 14,
     padding: 16,
@@ -800,21 +901,25 @@ const styles = StyleSheet.create({
     width: 42,
   },
   insightBannerSubtitle: {
-    color: premiumTheme.colors.muted,
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 13,
     lineHeight: 18,
   },
   insightBannerTitle: {
-    color: premiumTheme.colors.text,
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.display,
     fontSize: 15,
     fontWeight: "700",
   },
   insightBannerValue: {
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 12,
     fontWeight: "700",
   },
   metricFootnote: {
     color: premiumTheme.colors.muted,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -828,42 +933,61 @@ const styles = StyleSheet.create({
   },
   metricLabel: {
     color: premiumTheme.colors.muted,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 11,
     textTransform: "uppercase",
   },
   metricTile: {
-    backgroundColor: premiumTheme.colors.surfaceElevated,
+    backgroundColor: "#F6E3DD",
     borderColor: premiumTheme.colors.border,
     borderRadius: premiumTheme.radii.md,
-    borderWidth: 1,
+    borderWidth: 1.5,
     flex: 1,
     gap: 10,
     minHeight: 146,
     padding: 18,
   },
   metricValue: {
-    color: premiumTheme.colors.text,
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.display,
     fontSize: 28,
     fontWeight: "800",
     lineHeight: 32,
   },
-  patternLoopOne: {
-    borderRadius: 180,
+  patternNoise: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    opacity: 0.38,
+  },
+  patternOutlineOne: {
+    borderRadius: 34,
     borderWidth: 1,
-    height: 180,
+    height: 122,
     left: -18,
     position: "absolute",
-    top: 12,
-    width: 180,
+    top: 70,
+    transform: [{ rotate: "-14deg" }],
+    width: 120,
   },
-  patternLoopTwo: {
-    borderRadius: 220,
+  patternOutlineThree: {
+    borderRadius: 32,
     borderWidth: 1,
-    height: 220,
+    height: 88,
+    left: 42,
     position: "absolute",
-    right: -42,
-    top: -10,
-    width: 220,
+    top: 10,
+    transform: [{ rotate: "7deg" }],
+    width: 118,
+  },
+  patternOutlineTwo: {
+    borderRadius: 42,
+    borderWidth: 1,
+    height: 136,
+    position: "absolute",
+    right: -12,
+    top: -2,
+    transform: [{ rotate: "12deg" }],
+    width: 142,
   },
   patternWrap: {
     ...StyleSheet.absoluteFillObject,
@@ -873,12 +997,14 @@ const styles = StyleSheet.create({
     height: 8,
   },
   progressTrack: {
-    backgroundColor: "rgba(0,0,0,0.16)",
+    backgroundColor: "rgba(255,255,255,0.28)",
     borderRadius: 999,
     height: 8,
     overflow: "hidden",
   },
   queueCard: {
+    backgroundColor: "#F2EFEC",
+    borderWidth: 1.5,
     gap: 14,
   },
   queueMomentum: {
@@ -897,20 +1023,21 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   rankBadge: {
-    backgroundColor: premiumTheme.colors.surfaceMuted,
+    backgroundColor: "#EFE2DE",
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   rankLabel: {
-    color: premiumTheme.colors.text,
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 13,
     fontWeight: "700",
   },
   roundedButton: {
     alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(255,248,245,0.92)",
     borderRadius: 999,
     borderWidth: 1,
     flexDirection: "row",
@@ -932,7 +1059,8 @@ const styles = StyleSheet.create({
     top: -20,
   },
   roundedButtonText: {
-    color: premiumTheme.colors.text,
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 15,
     fontWeight: "700",
   },
@@ -955,16 +1083,19 @@ const styles = StyleSheet.create({
     width: 44,
   },
   rowSubtitle: {
-    color: premiumTheme.colors.muted,
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 13,
     lineHeight: 18,
   },
   rowTitle: {
-    color: premiumTheme.colors.text,
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.display,
     fontSize: 15,
     fontWeight: "600",
   },
   rowValue: {
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 13,
     fontWeight: "700",
   },
@@ -978,11 +1109,14 @@ const styles = StyleSheet.create({
   scrollContent: {
     gap: 18,
     paddingBottom: 132,
-    paddingHorizontal: 30,
+    paddingHorizontal: 20,
+  },
+  scrollContentTop: {
+    paddingTop: 12,
   },
   searchAction: {
     alignItems: "center",
-    backgroundColor: premiumTheme.colors.surfaceElevated,
+    backgroundColor: "rgba(224, 90, 71, 0.08)",
     borderRadius: 16,
     height: 44,
     justifyContent: "center",
@@ -994,43 +1128,54 @@ const styles = StyleSheet.create({
   },
   searchField: {
     alignItems: "center",
-    backgroundColor: premiumTheme.colors.surfaceElevated,
+    backgroundColor: "#FFFFFF",
     borderColor: premiumTheme.colors.border,
     borderRadius: premiumTheme.radii.md,
-    borderWidth: 1,
+    borderWidth: 1.5,
     flexDirection: "row",
     gap: 14,
     padding: 12,
+    shadowColor: "#5A6575",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.1,
+    shadowRadius: 22,
   },
   searchIcon: {
     alignItems: "center",
-    backgroundColor: premiumTheme.colors.surfaceMuted,
+    backgroundColor: "rgba(224, 90, 71, 0.08)",
     borderRadius: 16,
+    borderColor: "rgba(224, 90, 71, 0.14)",
+    borderWidth: 1,
     height: 44,
     justifyContent: "center",
     width: 44,
   },
   searchLabel: {
-    color: premiumTheme.colors.muted,
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 11,
   },
   searchValue: {
-    color: premiumTheme.colors.text,
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.display,
     fontSize: 15,
     fontWeight: "600",
   },
   sectionAction: {
-    color: premiumTheme.colors.muted,
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 12,
     fontWeight: "700",
   },
   sectionSubtitle: {
-    color: premiumTheme.colors.muted,
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 14,
     lineHeight: 19,
   },
   sectionTitle: {
-    color: premiumTheme.colors.text,
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.display,
     fontSize: 25,
     fontWeight: "800",
     lineHeight: 30,
@@ -1046,7 +1191,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   statCaption: {
-    color: premiumTheme.colors.muted,
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 12,
   },
   statPill: {
@@ -1057,35 +1203,44 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   statPillLabel: {
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 11,
     fontWeight: "700",
     textTransform: "uppercase",
   },
   statPillValue: {
-    color: premiumTheme.colors.text,
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.display,
     fontSize: 14,
     fontWeight: "700",
   },
   statValue: {
-    color: premiumTheme.colors.text,
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.display,
     fontSize: 20,
     fontWeight: "700",
   },
   supportingText: {
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 13,
     fontWeight: "600",
   },
   surfaceCard: {
-    backgroundColor: premiumTheme.colors.surfaceElevated,
+    backgroundColor: "#FFFFFF",
     borderColor: premiumTheme.colors.border,
     borderRadius: premiumTheme.radii.lg,
-    borderWidth: 1,
+    borderWidth: 1.5,
     gap: 14,
     padding: 18,
+    shadowColor: "#768190",
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.11,
+    shadowRadius: 28,
   },
   tag: {
     alignItems: "center",
     alignSelf: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.18)",
     borderRadius: 999,
     borderWidth: 1,
     flexDirection: "row",
@@ -1094,6 +1249,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   tagText: {
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 12,
     fontWeight: "700",
   },
@@ -1117,7 +1273,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   timelineValue: {
-    color: premiumTheme.colors.text,
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 13,
     fontWeight: "700",
   },
@@ -1142,10 +1299,20 @@ const styles = StyleSheet.create({
     width: 58,
   },
   venueCard: {
+    backgroundColor: "#F4EFED",
     borderRadius: premiumTheme.radii.lg,
-    borderWidth: 1,
-    gap: 12,
+    borderWidth: 1.5,
     overflow: "hidden",
+  },
+  venueCardContent: {
+    gap: 12,
+    minHeight: 220,
     padding: 18,
+  },
+  venueImage: {
+    borderRadius: premiumTheme.radii.lg,
+  },
+  venueImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
   },
 });

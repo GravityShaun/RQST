@@ -25,7 +25,133 @@
  #import "RNMapsMarkerView.h"
  #import "AIRMap.h"
  #import "AIRMapMarker.h"
-@@ -439,3 +441,4 @@
+@@ -105,7 +107,7 @@
+ 
+ 
+     _view.onPress = [self](NSDictionary* dictionary) {
+-        if (_eventEmitter) {
++        if (self->_eventEmitter) {
+             // Extract values from the NSDictionary
+             NSDictionary* coordinateDict = dictionary[@"coordinate"];
+             NSDictionary* positionDict = dictionary[@"position"];
+@@ -122,7 +124,7 @@
+                 .longitude = [coordinateDict[@"longitude"] doubleValue],
+             };
+ 
+-            auto eventEmitter = std::static_pointer_cast<RNMapsMarkerEventEmitter const>(_eventEmitter);
++            auto eventEmitter = std::static_pointer_cast<RNMapsMarkerEventEmitter const>(self->_eventEmitter);
+             facebook::react::RNMapsMarkerEventEmitter::OnPress data = {
+                 .action = std::string([dictionary[@"action"] UTF8String]),
+                 .id = std::string([dictionary[@"id"] UTF8String]),
+@@ -134,7 +136,7 @@
+     };
+ 
+     _view.onDeselect = [self](NSDictionary* dictionary) {
+-        if (_eventEmitter) {
++        if (self->_eventEmitter) {
+             // Extract values from the NSDictionary
+             NSDictionary* coordinateDict = dictionary[@"coordinate"];
+             NSDictionary* positionDict = dictionary[@"position"];
+@@ -151,7 +153,7 @@
+                 .longitude = [coordinateDict[@"longitude"] doubleValue],
+             };
+ 
+-            auto eventEmitter = std::static_pointer_cast<RNMapsMarkerEventEmitter const>(_eventEmitter);
++            auto eventEmitter = std::static_pointer_cast<RNMapsMarkerEventEmitter const>(self->_eventEmitter);
+             facebook::react::RNMapsMarkerEventEmitter::OnDeselect data = {
+                 .action = std::string([dictionary[@"action"] UTF8String]),
+                 .id = std::string([dictionary[@"id"] UTF8String]),
+@@ -163,7 +165,7 @@
+     };
+ 
+     _view.onDrag = [self](NSDictionary* dictionary) {
+-        if (_eventEmitter) {
++        if (self->_eventEmitter) {
+             // Extract values from the NSDictionary
+             NSDictionary* coordinateDict = dictionary[@"coordinate"];
+ 
+@@ -173,7 +175,7 @@
+                 .longitude = [coordinateDict[@"longitude"] doubleValue],
+             };
+ 
+-            auto eventEmitter = std::static_pointer_cast<RNMapsMarkerEventEmitter const>(_eventEmitter);
++            auto eventEmitter = std::static_pointer_cast<RNMapsMarkerEventEmitter const>(self->_eventEmitter);
+             facebook::react::RNMapsMarkerEventEmitter::OnDrag data = {
+                 .id = std::string([dictionary[@"id"] UTF8String]),
+                 .coordinate = coordinate,
+@@ -182,7 +184,7 @@
+         }
+     };
+     _view.onDragStart = [self](NSDictionary* dictionary) {
+-        if (_eventEmitter) {
++        if (self->_eventEmitter) {
+             // Extract values from the NSDictionary
+             NSDictionary* coordinateDict = dictionary[@"coordinate"];
+ 
+@@ -191,7 +193,7 @@
+                 .longitude = [coordinateDict[@"longitude"] doubleValue],
+             };
+ 
+-            auto eventEmitter = std::static_pointer_cast<RNMapsMarkerEventEmitter const>(_eventEmitter);
++            auto eventEmitter = std::static_pointer_cast<RNMapsMarkerEventEmitter const>(self->_eventEmitter);
+             facebook::react::RNMapsMarkerEventEmitter::OnDragStart data = {
+                 .id = std::string([dictionary[@"id"] UTF8String]),
+                 .coordinate = coordinate,
+@@ -201,7 +203,7 @@
+     };
+ 
+     _view.onDragEnd = [self](NSDictionary* dictionary) {
+-        if (_eventEmitter) {
++        if (self->_eventEmitter) {
+             // Extract values from the NSDictionary
+             NSDictionary* coordinateDict = dictionary[@"coordinate"];
+ 
+@@ -211,7 +213,7 @@
+                 .longitude = [coordinateDict[@"longitude"] doubleValue],
+             };
+ 
+-            auto eventEmitter = std::static_pointer_cast<RNMapsMarkerEventEmitter const>(_eventEmitter);
++            auto eventEmitter = std::static_pointer_cast<RNMapsMarkerEventEmitter const>(self->_eventEmitter);
+             facebook::react::RNMapsMarkerEventEmitter::OnDragEnd data = {
+                 .id = std::string([dictionary[@"id"] UTF8String]),
+                 .coordinate = coordinate,
+@@ -221,7 +223,7 @@
+     };
+ 
+     _view.onSelect = [self](NSDictionary* dictionary) {
+-        if (_eventEmitter) {
++        if (self->_eventEmitter) {
+             // Extract values from the NSDictionary
+             NSDictionary* coordinateDict = dictionary[@"coordinate"];
+             NSDictionary* positionDict = dictionary[@"position"];
+@@ -238,7 +240,7 @@
+                 .longitude = [coordinateDict[@"longitude"] doubleValue],
+             };
+ 
+-            auto eventEmitter = std::static_pointer_cast<RNMapsMarkerEventEmitter const>(_eventEmitter);
++            auto eventEmitter = std::static_pointer_cast<RNMapsMarkerEventEmitter const>(self->_eventEmitter);
+             facebook::react::RNMapsMarkerEventEmitter::OnSelect data = {
+                 .action = std::string([dictionary[@"action"] UTF8String]),
+                 .id = std::string([dictionary[@"id"] UTF8String]),
+@@ -251,7 +253,7 @@
+ 
+ 
+     _view.onCalloutPress = [self](NSDictionary* dictionary) {
+-        if (_eventEmitter) {
++        if (self->_eventEmitter) {
+             // Extract values from the NSDictionary
+             NSDictionary* pointDict = dictionary[@"point"];
+             NSDictionary* frameDict = dictionary[@"frame"];
+@@ -270,7 +272,7 @@
+                 .height = [frameDict[@"height"] doubleValue],
+             };
+ 
+-            auto eventEmitter = std::static_pointer_cast<RNMapsMarkerEventEmitter const>(_eventEmitter);
++            auto eventEmitter = std::static_pointer_cast<RNMapsMarkerEventEmitter const>(self->_eventEmitter);
+             facebook::react::RNMapsMarkerEventEmitter::OnCalloutPress data = {
+                 .action = std::string([dictionary[@"action"] UTF8String]),
+                 .id = std::string([dictionary[@"id"] UTF8String]),
+ @@ -439,3 +441,4 @@
      return RNMapsMarkerView.class;
  }
  

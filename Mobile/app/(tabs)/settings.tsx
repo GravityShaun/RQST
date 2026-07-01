@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Image, ImageBackground, StyleSheet, Text, View } from "react-native";
 
 import {
   ActionRow,
@@ -12,6 +12,7 @@ import {
   ToggleRow,
   premiumTheme,
 } from "../../src/components/premium-ui";
+import { unsplashImages } from "../../src/lib/unsplash";
 
 export default function SettingsScreen() {
   const [pushEnabled, setPushEnabled] = useState(true);
@@ -20,8 +21,9 @@ export default function SettingsScreen() {
 
   return (
     <ScreenShell>
-      <View style={styles.profileCard}>
-        <View style={styles.avatar} />
+      <ImageBackground source={{ uri: unsplashImages.settingsProfile }} imageStyle={styles.profileImage} style={styles.profileCard}>
+        <View style={styles.profileOverlay} />
+        <Image source={{ uri: unsplashImages.settingsProfile }} style={styles.avatar} />
         <Text style={styles.profileName}>Maya Young</Text>
         <Text style={styles.profileMood}>Ready for tonight</Text>
 
@@ -29,7 +31,7 @@ export default function SettingsScreen() {
           <StatPill label="Wallet" value="2 cards" tone="gold" />
           <StatPill label="Alerts" value="On" tone="mint" />
         </View>
-      </View>
+      </ImageBackground>
 
       <View style={styles.metricRow}>
         <FeatureTile icon="card-outline" title="Payments" subtitle="Cards and receipts" value="Ready" tone="gold" />
@@ -82,7 +84,6 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   avatar: {
-    backgroundColor: "#FFFFFF",
     borderRadius: 38,
     height: 76,
     width: 76,
@@ -99,19 +100,31 @@ const styles = StyleSheet.create({
   },
   profileCard: {
     alignItems: "center",
-    backgroundColor: "#F5F5F1",
+    backgroundColor: "#D95E4F",
+    borderColor: "rgba(255,255,255,0.24)",
     borderRadius: 30,
+    borderWidth: 1,
+    overflow: "hidden",
     padding: 24,
   },
+  profileImage: {
+    borderRadius: 30,
+  },
   profileMood: {
-    color: "#7F8088",
+    color: "rgba(255,249,247,0.82)",
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 14,
     marginTop: 6,
   },
   profileName: {
-    color: premiumTheme.colors.background,
+    color: premiumTheme.colors.text,
+    fontFamily: premiumTheme.fonts.display,
     fontSize: 34,
     fontWeight: "800",
     marginTop: 16,
+  },
+  profileOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(217, 94, 79, 0.46)",
   },
 });

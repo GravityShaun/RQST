@@ -1,6 +1,6 @@
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { premiumTheme } from "../../src/components/premium-ui";
 
@@ -20,9 +20,12 @@ export default function TabsLayout() {
         sceneStyle: {
           backgroundColor: premiumTheme.colors.background,
         },
-        tabBarShowLabel: false,
+        tabBarShowLabel: true,
+        tabBarActiveTintColor: "#FFFFFF",
+        tabBarInactiveTintColor: "rgba(223, 230, 240, 0.72)",
+        tabBarLabelStyle: styles.tabLabel,
+        tabBarItemStyle: styles.tabBarItem,
         tabBarStyle: styles.tabBar,
-        tabBarBackground: () => <View style={styles.tabBarBackground} />,
       }}
     >
       {tabs.map((tab) => (
@@ -31,16 +34,29 @@ export default function TabsLayout() {
           name={tab.name}
           options={{
             title: tab.title,
+            tabBarLabel: tab.title,
             tabBarIcon: ({ focused }) => (
-              <View style={styles.tabItemWrap}>
-                <View style={[styles.tabItem, focused && styles.tabItemActive, tab.name === "requests" && styles.requestTab]}>
-                  <Ionicons
-                    name={focused ? tab.activeIcon : tab.icon}
-                    size={tab.name === "requests" ? 22 : 19}
-                    color={tab.name === "requests" ? premiumTheme.colors.text : focused ? premiumTheme.colors.text : premiumTheme.colors.muted}
-                  />
-                </View>
-                <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>{tab.title}</Text>
+              <View
+                style={[
+                  styles.tabItem,
+                  focused && styles.tabItemActive,
+                  tab.name === "requests" && styles.requestTab,
+                  tab.name === "requests" && focused && styles.requestTabActive,
+                ]}
+              >
+                <Ionicons
+                  name={focused ? tab.activeIcon : tab.icon}
+                  size={tab.name === "requests" ? 22 : 19}
+                  color={
+                    tab.name === "requests"
+                      ? focused
+                        ? premiumTheme.colors.coral
+                        : "#FFFFFF"
+                      : focused
+                        ? premiumTheme.colors.coral
+                        : "#FFFFFF"
+                  }
+                />
               </View>
             ),
           }}
@@ -52,33 +68,43 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   requestTab: {
-    backgroundColor: "#C94B4B",
-    borderColor: "rgba(255,255,255,0.18)",
+    backgroundColor: "#E05A47",
+    borderColor: "rgba(255,255,255,0.24)",
     borderWidth: 1,
-    shadowColor: "#C94B4B",
+    shadowColor: "#E05A47",
     shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.24,
+    shadowRadius: 14,
+  },
+  requestTabActive: {
+    backgroundColor: "#87A8D8",
+    borderColor: "#4C5F7D",
+    borderWidth: 0.75,
+    shadowColor: "#16202F",
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.32,
-    shadowRadius: 12,
+    shadowRadius: 22,
   },
   tabBar: {
-    backgroundColor: "transparent",
-    borderTopWidth: 0,
-    bottom: 0,
-    elevation: 0,
-    height: 76,
-    left: 12,
-    paddingHorizontal: 10,
-    paddingBottom: 8,
-    paddingTop: 4,
-    position: "absolute",
-    right: 12,
-  },
-  tabBarBackground: {
-    backgroundColor: "rgba(38,40,54,0.98)",
+    backgroundColor: "#4A5466",
     borderColor: premiumTheme.colors.border,
     borderRadius: 22,
     borderWidth: 1,
+    borderTopWidth: 0,
+    bottom: -4,
+    elevation: 0,
+    height: 76,
+    left: 8,
+    paddingHorizontal: 4,
+    paddingBottom: 8,
+    paddingTop: 4,
+    position: "absolute",
+    right: 8,
+  },
+  tabBarItem: {
     flex: 1,
+    minWidth: 0,
+    paddingTop: 4,
   },
   tabItem: {
     alignItems: "center",
@@ -86,23 +112,24 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     height: 40,
     justifyContent: "center",
+    marginTop: -24,
     width: 40,
   },
   tabItemActive: {
-    backgroundColor: premiumTheme.colors.surfaceMuted,
-  },
-  tabItemWrap: {
-    alignItems: "center",
-    gap: 2,
-    justifyContent: "center",
-    minWidth: 54,
+    backgroundColor: premiumTheme.colors.background,
+    borderColor: "#3F4754",
+    borderWidth: 0.75,
+    shadowColor: "#16202F",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.32,
+    shadowRadius: 22,
   },
   tabLabel: {
-    color: premiumTheme.colors.muted,
-    fontSize: 10,
+    fontFamily: premiumTheme.fonts.body,
+    fontSize: 9,
     fontWeight: "700",
-  },
-  tabLabelActive: {
-    color: premiumTheme.colors.text,
+    marginTop: -5,
+    paddingBottom: 4,
+    textAlign: "center",
   },
 });
