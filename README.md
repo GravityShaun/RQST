@@ -21,8 +21,8 @@ pnpm test
 Mobile app development:
 
 ```bash
-cd Mobile
-npm start
+pnpm mobile:dev
+pnpm mobile:ios
 ```
 
 The Expo dev server is pinned to port `8083` so the iOS dev client and Metro stay aligned.

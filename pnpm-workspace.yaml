@@ -2,3 +2,9 @@ packages:
   - Mobile
   - Desktop
   - packages/*
+peerDependencyRules:
+  allowedVersions:
+    '@nuxt/schema': 3.21.8
+allowBuilds:
+  '@parcel/watcher': false
+  esbuild: false

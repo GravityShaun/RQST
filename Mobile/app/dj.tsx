@@ -1,5 +1,5 @@
 import { Link } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, ImageBackground, Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
   ActionRow,
@@ -31,10 +31,11 @@ export default function DjProfileScreen() {
       />
 
       <SurfaceCard style={styles.heroCard}>
+        <ImageBackground source={{ uri: djProfile.imageUri }} imageStyle={styles.heroImage} style={styles.heroImageWrap}>
+          <View style={styles.heroOverlay} />
+        </ImageBackground>
         <View style={styles.profileTopRow}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>DS</Text>
-          </View>
+          <Image source={{ uri: djProfile.imageUri }} style={styles.avatar} />
           <View style={styles.profileCopy}>
             <Text style={styles.handle}>{djProfile.handle}</Text>
             <Text style={styles.bio}>{djProfile.bio}</Text>
@@ -106,21 +107,13 @@ export default function DjProfileScreen() {
 
 const styles = StyleSheet.create({
   avatar: {
-    alignItems: "center",
-    backgroundColor: "#17181B",
     borderRadius: 40,
     height: 80,
-    justifyContent: "center",
     width: 80,
-  },
-  avatarText: {
-    color: "#FFFFFF",
-    fontSize: 24,
-    fontWeight: "800",
   },
   backButton: {
     alignSelf: "flex-start",
-    backgroundColor: premiumTheme.colors.surface,
+    backgroundColor: "rgba(255,255,255,0.78)",
     borderColor: premiumTheme.colors.border,
     borderRadius: 999,
     borderWidth: 1,
@@ -128,22 +121,34 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backButtonText: {
-    color: premiumTheme.colors.text,
+    color: premiumTheme.colors.ink,
     fontSize: 13,
     fontWeight: "700",
   },
   bio: {
-    color: "#5F6573",
+    color: premiumTheme.colors.inkMuted,
     fontSize: 15,
     lineHeight: 22,
   },
   handle: {
-    color: premiumTheme.colors.text,
+    color: premiumTheme.colors.ink,
     fontSize: 18,
     fontWeight: "800",
   },
   heroCard: {
-    backgroundColor: "#DFF9EC",
+    backgroundColor: "rgba(255,255,255,0.72)",
+  },
+  heroImage: {
+    borderRadius: 24,
+  },
+  heroImageWrap: {
+    borderRadius: 24,
+    height: 180,
+    overflow: "hidden",
+  },
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(217, 94, 79, 0.18)",
   },
   metricRow: {
     flexDirection: "row",

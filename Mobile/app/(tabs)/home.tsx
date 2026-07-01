@@ -1,6 +1,6 @@
 import { Link } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ImageBackground, Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
   ActionRow,
@@ -15,6 +15,7 @@ import {
 } from "../../src/components/premium-ui";
 import { useMockHomeData } from "../../src/features/home/useMockHomeData";
 import { nearbyDjs, topRequestedSongs } from "../../src/features/rqst/mock-data";
+import { unsplashImages } from "../../src/lib/unsplash";
 
 export default function HomeScreen() {
   const data = useMockHomeData();
@@ -27,14 +28,14 @@ export default function HomeScreen() {
             <Ionicons name="sparkles" size={20} color={premiumTheme.colors.background} />
           </Pressable>
           <Pressable style={styles.circleButton}>
-            <Ionicons name="search" size={20} color={premiumTheme.colors.text} />
+            <Ionicons name="search" size={20} color={premiumTheme.colors.ink} />
           </Pressable>
         </View>
         <Pressable style={styles.circleButton}>
           <View style={styles.notificationDot}>
             <Text style={styles.notificationDotText}>9</Text>
           </View>
-          <Ionicons name="notifications-outline" size={20} color={premiumTheme.colors.text} />
+          <Ionicons name="notifications-outline" size={20} color={premiumTheme.colors.ink} />
         </Pressable>
       </View>
 
@@ -55,21 +56,20 @@ export default function HomeScreen() {
         actionLabel="Open list"
         metrics={data.detectedSession.metrics}
         chips={["Nearby", "Open", "Add money anytime"]}
+        imageUri={unsplashImages.homeHero}
       />
 
       <View style={styles.mosaicRow}>
         {nearbyDjs.slice(0, 2).map((dj, index) => (
           <Link key={dj.name} href="/dj" asChild>
-            <Pressable style={[styles.mosaicCard, index === 0 ? styles.mosaicPeach : styles.mosaicMint]}>
-              <View style={styles.mosaicAvatar}>
-                <Text style={styles.mosaicAvatarText}>
-                  {dj.name
-                    .split(" ")
-                    .map((part) => part[0])
-                    .join("")
-                    .slice(0, 2)}
-                </Text>
-              </View>
+            <Pressable style={styles.mosaicCard}>
+              <ImageBackground
+                source={{ uri: dj.imageUri }}
+                imageStyle={styles.mosaicImage}
+                style={[styles.mosaicImageWrap, index === 0 ? styles.mosaicPeach : styles.mosaicMint]}
+              >
+                <View style={styles.mosaicOverlay} />
+              </ImageBackground>
               <Text style={styles.mosaicTitle}>{dj.name}</Text>
               <Text style={styles.mosaicSubtitle}>{dj.detail}</Text>
             </Pressable>
@@ -82,7 +82,7 @@ export default function HomeScreen() {
         title="Top requested right now"
         subtitle={`${topRequestedSongs[0]?.title} is pulling the most money in the room tonight.`}
         value={topRequestedSongs[0]?.amount ?? "$0"}
-        tone="slate"
+        tone="coral"
       />
 
       <SectionTitle title="Your night" subtitle="Shortcuts that feel more like a real app and less like admin panels." />
@@ -116,54 +116,64 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   circleButton: {
     alignItems: "center",
-    backgroundColor: premiumTheme.colors.surfaceElevated,
+    backgroundColor: "#F7F5F2",
+    borderColor: premiumTheme.colors.border,
     borderRadius: 24,
+    borderWidth: 1,
     height: 48,
     justifyContent: "center",
     position: "relative",
+    shadowColor: "#5B6474",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
     width: 48,
   },
   circleButtonLight: {
-    backgroundColor: "#FFF5EF",
-  },
-  mosaicAvatar: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.18)",
-    borderRadius: 28,
-    height: 56,
-    justifyContent: "center",
-    width: 56,
-  },
-  mosaicAvatarText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "800",
+    backgroundColor: "#D94E3D",
   },
   mosaicCard: {
+    backgroundColor: "rgba(255,255,255,0.64)",
+    borderColor: "rgba(255,255,255,0.28)",
+    borderWidth: 1,
     borderRadius: 30,
     flex: 1,
     gap: 12,
     minHeight: 190,
     overflow: "hidden",
-    padding: 18,
+    padding: 12,
+  },
+  mosaicImage: {
+    borderRadius: 22,
+  },
+  mosaicImageWrap: {
+    borderRadius: 22,
+    height: 126,
+    justifyContent: "flex-end",
   },
   mosaicMint: {
-    backgroundColor: "#98D8C4",
+    backgroundColor: "#91D4C5",
+  },
+  mosaicOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(32, 24, 24, 0.10)",
   },
   mosaicPeach: {
-    backgroundColor: "#D8A487",
+    backgroundColor: "#E79E8A",
   },
   mosaicRow: {
     flexDirection: "row",
     gap: 12,
   },
   mosaicSubtitle: {
-    color: "rgba(255,255,255,0.84)",
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 13,
     lineHeight: 18,
   },
   mosaicTitle: {
-    color: "#FFFFFF",
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.display,
     fontSize: 28,
     fontWeight: "700",
     lineHeight: 30,
@@ -171,8 +181,8 @@ const styles = StyleSheet.create({
   },
   notificationDot: {
     alignItems: "center",
-    backgroundColor: premiumTheme.colors.ringPink,
-    borderColor: premiumTheme.colors.ringGold,
+    backgroundColor: premiumTheme.colors.coral,
+    borderColor: "#F9DFD5",
     borderRadius: 10,
     borderWidth: 1.5,
     height: 20,
@@ -185,6 +195,7 @@ const styles = StyleSheet.create({
   },
   notificationDotText: {
     color: "#FFFFFF",
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 11,
     fontWeight: "800",
   },
@@ -198,7 +209,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   welcomeEyebrow: {
-    color: premiumTheme.colors.muted,
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 12,
     fontWeight: "700",
     letterSpacing: 1.2,
@@ -210,7 +222,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   welcomeTitle: {
-    color: premiumTheme.colors.text,
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.display,
     fontSize: 40,
     fontWeight: "800",
     lineHeight: 42,

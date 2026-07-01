@@ -1,19 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import { useIsFocused } from "@react-navigation/native";
 import * as Location from "expo-location";
 import {
   Animated,
+  InteractionManager,
   PanResponder,
   Platform,
   Pressable,
+  SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
 } from "react-native";
-import MapView, { Marker, PROVIDER_GOOGLE, type Region } from "react-native-maps";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import MapView, { Marker, PROVIDER_GOOGLE, type MapStyleElement, type Region } from "react-native-maps";
 
 import {
   SearchField,
@@ -39,10 +42,80 @@ const CHARLESTON_REGION: Region = {
   longitudeDelta: 0.05,
 };
 
+const DARK_MAP_STYLE: MapStyleElement[] = [
+  {
+    featureType: "all",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#ffffff" }],
+  },
+  {
+    featureType: "all",
+    elementType: "labels.text.stroke",
+    stylers: [{ color: "#021019" }, { lightness: 13 }],
+  },
+  {
+    featureType: "administrative",
+    elementType: "geometry.fill",
+    stylers: [{ color: "#08304b" }],
+  },
+  {
+    featureType: "administrative",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#144b53" }, { lightness: 14 }, { weight: 1.4 }],
+  },
+  {
+    featureType: "landscape",
+    elementType: "all",
+    stylers: [{ color: "#08304b" }],
+  },
+  {
+    featureType: "poi",
+    elementType: "geometry",
+    stylers: [{ color: "#0c4152" }, { lightness: 5 }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry.fill",
+    stylers: [{ color: "#0b434f" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#0b434f" }, { lightness: 25 }],
+  },
+  {
+    featureType: "road.arterial",
+    elementType: "geometry.fill",
+    stylers: [{ color: "#0b3d51" }],
+  },
+  {
+    featureType: "road.arterial",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#0b3d51" }, { lightness: 16 }],
+  },
+  {
+    featureType: "road.local",
+    elementType: "geometry",
+    stylers: [{ color: "#144b53" }],
+  },
+  {
+    featureType: "transit",
+    elementType: "all",
+    stylers: [{ color: "#146474" }],
+  },
+  {
+    featureType: "water",
+    elementType: "all",
+    stylers: [{ color: "#0b3d51" }],
+  },
+];
+
 const COLLAPSED_PEEK = 230;
 const EXPANDED_TOP_GAP = 140;
 const TAB_BAR_CLEARANCE = 102;
 const MAP_ANIMATION_MS = 450;
+const IOS_TOP_INSET = 44;
+const APPLE_ATTRIBUTION_BOTTOM_INSET = 4;
 
 function regionFromCoordinates(latitude: number, longitude: number): Region {
   return {
@@ -55,13 +128,13 @@ function regionFromCoordinates(latitude: number, longitude: number): Region {
 
 export default function FindScreen() {
   const { height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
   const mapRef = useRef<MapView | null>(null);
   const [selectedVenueTitle, setSelectedVenueTitle] = useState(nearbyVenues[0]?.title ?? "");
   const [isExpanded, setIsExpanded] = useState(false);
   const [hasLocationPermission, setHasLocationPermission] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
-  const [mapHeading, setMapHeading] = useState("Charleston, SC");
+  const [shouldRenderMap, setShouldRenderMap] = useState(false);
 
   const selectedVenue = nearbyVenues.find((venue) => venue.title === selectedVenueTitle) ?? nearbyVenues[0];
 
@@ -70,7 +143,8 @@ export default function FindScreen() {
   }
 
   const featuredVenue = nearbyVenues[1] ?? selectedVenue;
-  const openTop = Math.max(EXPANDED_TOP_GAP, insets.top + 88);
+  const topInset = Platform.OS === "ios" ? IOS_TOP_INSET : StatusBar.currentHeight ?? 24;
+  const openTop = Math.max(EXPANDED_TOP_GAP, topInset + 88);
   const closedTop = Math.max(openTop + 120, height - COLLAPSED_PEEK - TAB_BAR_CLEARANCE);
   const closedOffset = closedTop - openTop;
   const mapBottomPadding = height - closedTop + TAB_BAR_CLEARANCE + 24;
@@ -83,52 +157,23 @@ export default function FindScreen() {
   }, [closedOffset, drawerOffset, isExpanded]);
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function centerOnUser() {
-      setIsLocating(true);
-
-      try {
-        const permission = await Location.requestForegroundPermissionsAsync();
-
-        if (!isMounted || permission.status !== "granted") {
-          if (isMounted) {
-            setHasLocationPermission(false);
-            setMapHeading("Charleston, SC");
-          }
-          return;
-        }
-
-        const position = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-
-        if (!isMounted) {
-          return;
-        }
-
-        const nextRegion = regionFromCoordinates(position.coords.latitude, position.coords.longitude);
-        setHasLocationPermission(true);
-        setMapHeading("Near you");
-        mapRef.current?.animateToRegion(nextRegion, MAP_ANIMATION_MS);
-      } catch {
-        if (isMounted) {
-          setHasLocationPermission(false);
-          setMapHeading("Charleston, SC");
-        }
-      } finally {
-        if (isMounted) {
-          setIsLocating(false);
-        }
-      }
+    if (!isFocused) {
+      setShouldRenderMap(false);
+      return;
     }
 
-    void centerOnUser();
+    let isCancelled = false;
+    const task = InteractionManager.runAfterInteractions(() => {
+      if (!isCancelled) {
+        setShouldRenderMap(true);
+      }
+    });
 
     return () => {
-      isMounted = false;
+      isCancelled = true;
+      task.cancel();
     };
-  }, []);
+  }, [isFocused]);
 
   function animateDrawer(nextExpanded: boolean) {
     setIsExpanded(nextExpanded);
@@ -138,7 +183,7 @@ export default function FindScreen() {
       mass: 0.9,
       stiffness: 220,
       toValue: nextExpanded ? 0 : closedOffset,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
   }
 
@@ -164,22 +209,18 @@ export default function FindScreen() {
 
       if (permission.status !== "granted") {
         setHasLocationPermission(false);
-        setMapHeading("Charleston, SC");
         mapRef.current?.animateToRegion(CHARLESTON_REGION, MAP_ANIMATION_MS);
         return;
       }
 
-      const position = await Location.getCurrentPositionAsync({
+      await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Highest,
       });
-      const nextRegion = regionFromCoordinates(position.coords.latitude, position.coords.longitude);
 
       setHasLocationPermission(true);
-      setMapHeading("Near you");
-      mapRef.current?.animateToRegion(nextRegion, MAP_ANIMATION_MS);
+      mapRef.current?.animateToRegion(CHARLESTON_REGION, MAP_ANIMATION_MS);
     } catch {
       setHasLocationPermission(false);
-      setMapHeading("Charleston, SC");
       mapRef.current?.animateToRegion(CHARLESTON_REGION, MAP_ANIMATION_MS);
     } finally {
       setIsLocating(false);
@@ -207,99 +248,89 @@ export default function FindScreen() {
     },
   });
 
-  const mapShadeOpacity = drawerOffset.interpolate({
-    inputRange: [0, closedOffset || 1],
-    outputRange: [0.14, 0],
-    extrapolate: "clamp",
-  });
-
   return (
-    <SafeAreaView edges={["top"]} style={styles.screen}>
+    <SafeAreaView style={styles.screen}>
       <View style={styles.mapWrap}>
-        <MapView
-          ref={mapRef}
-          initialRegion={CHARLESTON_REGION}
-          mapPadding={{
-            bottom: mapBottomPadding,
-            left: 0,
-            right: 0,
-            top: 180,
-          }}
-          provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
-          showsBuildings
-          showsCompass={false}
-          showsMyLocationButton={false}
-          showsUserLocation={hasLocationPermission}
-          style={styles.map}
-        >
-          {nearbyVenues.map((venue) => {
-            const isSelected = venue.title === selectedVenue.title;
+        {shouldRenderMap ? (
+          <MapView
+            ref={mapRef}
+            appleLogoInsets={
+              Platform.OS === "ios"
+                ? { bottom: APPLE_ATTRIBUTION_BOTTOM_INSET, left: 8, right: 0, top: 0 }
+                : undefined
+            }
+            initialRegion={CHARLESTON_REGION}
+            legalLabelInsets={
+              Platform.OS === "ios"
+                ? { bottom: APPLE_ATTRIBUTION_BOTTOM_INSET, left: 8, right: 0, top: 0 }
+                : undefined
+            }
+            mapPadding={{
+              bottom: mapBottomPadding,
+              left: 0,
+              right: 0,
+              top: 180,
+            }}
+            customMapStyle={Platform.OS === "android" ? DARK_MAP_STYLE : undefined}
+            mapType={Platform.OS === "ios" ? "mutedStandard" : "standard"}
+            provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
+            showsBuildings
+            showsCompass={false}
+            showsMyLocationButton={false}
+            showsUserLocation={hasLocationPermission}
+            style={styles.map}
+            userInterfaceStyle="dark"
+          >
+            {nearbyVenues.map((venue) => {
+              const isSelected = venue.title === selectedVenue.title;
 
-            return (
-              <Marker
-                coordinate={{ latitude: venue.latitude, longitude: venue.longitude }}
-                description={`${venue.distance} · $${venue.requestFloorCents / 100} minimum`}
-                key={venue.title}
-                onPress={() => focusVenue(venue.title)}
-                title={venue.title}
-              >
-                <View style={styles.markerShell}>
-                  <View
-                    style={[
-                      styles.markerCore,
-                      { backgroundColor: drawerTone[venue.tone] },
-                      isSelected && styles.markerCoreActive,
-                    ]}
-                  >
-                    <Ionicons
-                      color={isSelected ? premiumTheme.colors.background : premiumTheme.colors.text}
-                      name="radio"
-                      size={15}
+              return (
+                <Marker
+                  coordinate={{ latitude: venue.latitude, longitude: venue.longitude }}
+                  description={`${venue.distance} · $${venue.requestFloorCents / 100} minimum`}
+                  key={venue.title}
+                  onPress={() => focusVenue(venue.title)}
+                  title={venue.title}
+                >
+                  <View style={styles.markerShell}>
+                    <View
+                      style={[
+                        styles.markerCore,
+                        { backgroundColor: drawerTone[venue.tone] },
+                        isSelected && styles.markerCoreActive,
+                      ]}
+                    >
+                      <Ionicons color={premiumTheme.colors.ink} name="radio" size={15} />
+                    </View>
+                    <View
+                      style={[
+                        styles.markerTip,
+                        { borderTopColor: drawerTone[venue.tone] },
+                        isSelected && styles.markerTipActive,
+                      ]}
                     />
                   </View>
-                  <View
-                    style={[
-                      styles.markerTip,
-                      { borderTopColor: drawerTone[venue.tone] },
-                      isSelected && styles.markerTipActive,
-                    ]}
-                  />
-                </View>
-              </Marker>
-            );
-          })}
-        </MapView>
-
-        <Animated.View pointerEvents="none" style={[styles.mapShade, { opacity: mapShadeOpacity }]} />
-
-        <View style={styles.mapBadge}>
-          <Ionicons name="radio-outline" size={16} color={premiumTheme.colors.background} />
-          <Text style={styles.mapBadgeText}>{nearbyVenues.length} live rooms</Text>
-        </View>
-
-        <View style={styles.neighborhoodLabel}>
-          <Text style={styles.neighborhoodEyebrow}>
-            {hasLocationPermission ? "Showing venues near" : "Fallback center"}
-          </Text>
-          <Text style={styles.neighborhoodTitle}>{mapHeading}</Text>
-        </View>
+                </Marker>
+              );
+            })}
+          </MapView>
+        ) : (
+          <View style={[styles.map, styles.mapPlaceholder]} />
+        )}
 
         <View style={styles.topOverlay}>
-          <View style={styles.topBar}>
-            <View>
-              <Text style={styles.eyebrow}>Discover</Text>
-              <Text style={styles.title}>Find a DJ</Text>
+          <View style={styles.searchLocationRow}>
+            <View style={styles.searchFieldWrap}>
+              <SearchField label="Search nearby" value="Venues, artists, or neighborhoods" />
             </View>
             <Pressable onPress={handleLocatePress} style={styles.circleButton}>
               <Ionicons
-                color={premiumTheme.colors.text}
+                color={premiumTheme.colors.ink}
                 name={isLocating ? "sync-outline" : "locate-outline"}
                 size={20}
               />
             </Pressable>
           </View>
-
-          <SearchField label="Search nearby" value="Venues, artists, or neighborhoods" />
         </View>
 
         <Animated.View
@@ -326,7 +357,7 @@ export default function FindScreen() {
                 <View style={[styles.drawerToneDot, { backgroundColor: drawerTone[selectedVenue.tone] }]} />
                 <View style={styles.drawerAction}>
                   <Ionicons
-                    color={premiumTheme.colors.text}
+                    color={premiumTheme.colors.ink}
                     name={isExpanded ? "chevron-down" : "chevron-up"}
                     size={20}
                   />
@@ -372,16 +403,20 @@ export default function FindScreen() {
 const styles = StyleSheet.create({
   circleButton: {
     alignItems: "center",
-    backgroundColor: "rgba(16,16,22,0.62)",
-    borderColor: "rgba(255,255,255,0.18)",
+    backgroundColor: "#F7F5F2",
+    borderColor: premiumTheme.colors.border,
     borderRadius: 24,
     borderWidth: 1,
     height: 48,
     justifyContent: "center",
+    shadowColor: "#5B6474",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
     width: 48,
   },
   drawer: {
-    backgroundColor: "rgba(17,18,24,0.98)",
+    backgroundColor: "#EFECE9",
     borderColor: premiumTheme.colors.border,
     borderTopLeftRadius: 34,
     borderTopRightRadius: 34,
@@ -396,7 +431,7 @@ const styles = StyleSheet.create({
   },
   drawerAction: {
     alignItems: "center",
-    backgroundColor: premiumTheme.colors.surfaceMuted,
+    backgroundColor: "rgba(224, 90, 71, 0.12)",
     borderRadius: 18,
     height: 36,
     justifyContent: "center",
@@ -408,7 +443,8 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   drawerEyebrow: {
-    color: premiumTheme.colors.muted,
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 1.1,
@@ -432,12 +468,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   drawerSubtitle: {
-    color: premiumTheme.colors.muted,
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
     fontSize: 13,
     lineHeight: 18,
   },
   drawerTitle: {
-    color: premiumTheme.colors.text,
+    color: premiumTheme.colors.ink,
+    fontFamily: premiumTheme.fonts.display,
     fontSize: 24,
     fontWeight: "800",
     lineHeight: 28,
@@ -447,13 +485,6 @@ const styles = StyleSheet.create({
     height: 14,
     width: 14,
   },
-  eyebrow: {
-    color: "rgba(247,243,239,0.76)",
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-  },
   filterRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -461,7 +492,7 @@ const styles = StyleSheet.create({
   },
   handle: {
     alignSelf: "center",
-    backgroundColor: "rgba(255,255,255,0.22)",
+    backgroundColor: "rgba(30,23,23,0.34)",
     borderRadius: 999,
     height: 5,
     width: 56,
@@ -469,43 +500,30 @@ const styles = StyleSheet.create({
   map: {
     ...StyleSheet.absoluteFillObject,
   },
-  mapBadge: {
-    alignItems: "center",
-    backgroundColor: "#F6B734",
-    borderRadius: 999,
-    flexDirection: "row",
-    gap: 8,
-    left: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    position: "absolute",
-    top: 182,
-  },
-  mapBadgeText: {
-    color: premiumTheme.colors.background,
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  mapShade: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: premiumTheme.colors.background,
+  mapPlaceholder: {
+    backgroundColor: "#0c4152",
   },
   mapWrap: {
-    backgroundColor: premiumTheme.colors.background,
+    backgroundColor: "#021019",
     flex: 1,
   },
   markerCore: {
     alignItems: "center",
-    borderColor: "rgba(255,255,255,0.3)",
+    borderColor: "rgba(255,255,255,0.86)",
     borderRadius: 18,
     borderWidth: 2,
     height: 36,
     justifyContent: "center",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
     width: 36,
   },
   markerCoreActive: {
-    borderColor: premiumTheme.colors.text,
-    transform: [{ scale: 1.08 }],
+    borderColor: "#FFFFFF",
+    height: 42,
+    width: 42,
   },
   markerShell: {
     alignItems: "center",
@@ -519,26 +537,9 @@ const styles = StyleSheet.create({
     marginTop: -2,
   },
   markerTipActive: {
-    transform: [{ scaleY: 1.1 }],
-  },
-  neighborhoodEyebrow: {
-    color: "rgba(16,16,22,0.54)",
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.1,
-    textTransform: "uppercase",
-  },
-  neighborhoodLabel: {
-    left: 20,
-    position: "absolute",
-    top: 112,
-  },
-  neighborhoodTitle: {
-    color: premiumTheme.colors.background,
-    fontSize: 36,
-    fontWeight: "800",
-    lineHeight: 40,
-    marginTop: 6,
+    borderLeftWidth: 7,
+    borderRightWidth: 7,
+    borderTopWidth: 12,
   },
   pillRow: {
     flexDirection: "row",
@@ -549,20 +550,15 @@ const styles = StyleSheet.create({
     backgroundColor: premiumTheme.colors.background,
     flex: 1,
   },
-  title: {
-    color: premiumTheme.colors.text,
-    fontSize: 32,
-    fontWeight: "800",
-    lineHeight: 36,
-    marginTop: 4,
+  searchFieldWrap: {
+    flex: 1,
   },
-  topBar: {
+  searchLocationRow: {
     alignItems: "center",
     flexDirection: "row",
-    justifyContent: "space-between",
+    gap: 12,
   },
   topOverlay: {
-    gap: 16,
     left: 20,
     position: "absolute",
     right: 20,
@@ -572,6 +568,7 @@ const styles = StyleSheet.create({
     borderRadius: premiumTheme.radii.lg,
   },
   venueWrapActive: {
+    backgroundColor: "#FFFFFF",
     shadowColor: "#F6B734",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.18,
