@@ -24,7 +24,7 @@
           <button class="card" style="padding: 12px 16px">Show QR</button>
         </div>
       </div>
-      <p class="muted">The next implementation pass wires these controls to `Backend/api/v1/dj/sessions/*` endpoints.</p>
+      <p class="muted">The next implementation pass wires these controls to `backend/api/v1/dj/sessions/*` endpoints.</p>
     </section>
   </div>
 </template>
@@ -35,4 +35,3 @@ import { useDashboardData } from "~/composables/useDashboardData";
 
 const data = useDashboardData();
 </script>
-

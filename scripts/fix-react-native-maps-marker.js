@@ -3,7 +3,7 @@ const path = require('path');
 
 const repoRoot = path.join(__dirname, '..');
 const packageRoots = [
-  path.join(repoRoot, 'Mobile', 'node_modules', 'react-native-maps'),
+  path.join(repoRoot, 'mobile', 'node_modules', 'react-native-maps'),
   path.join(repoRoot, 'node_modules', 'react-native-maps'),
 ];
 

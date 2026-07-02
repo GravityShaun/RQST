@@ -8,7 +8,7 @@ importers:
 
   .: {}
 
-  Desktop:
+  desktop:
     dependencies:
       '@pinia/nuxt':
         specifier: 0.10.1
@@ -29,7 +29,7 @@ importers:
         specifier: ^3.5.0
         version: 3.5.39(typescript@5.8.3)
 
-  Mobile:
+  mobile:
     dependencies:
       '@expo/vector-icons':
         specifier: ^14.0.0

@@ -2,9 +2,9 @@
 
 RQST is a DJ song request platform with three applications:
 
-- `Backend`: FastAPI backend for auth, sessions, queueing, payments, and realtime.
-- `Mobile`: Expo / React Native listener app.
-- `Desktop`: Nuxt 3 + Tauri DJ desktop app.
+- `backend`: FastAPI backend for auth, sessions, queueing, payments, and realtime.
+- `mobile`: Expo / React Native listener app.
+- `desktop`: Nuxt 3 + Tauri DJ desktop app.
 - `packages/contracts`: shared API contracts and generated-client entrypoints.
 - `packages/shared-config`: shared design tokens and product constants.
 
@@ -30,7 +30,7 @@ The Expo dev server is pinned to port `8083` so the iOS dev client and Metro sta
 Backend setup:
 
 ```bash
-cd Backend
+cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -e .[dev]
