@@ -3,9 +3,9 @@
 ## Repository Layout
 
 ```text
-Backend/
-Mobile/
-Desktop/
+backend/
+mobile/
+desktop/
 packages/
   contracts/
   shared-config/

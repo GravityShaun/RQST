@@ -4,7 +4,7 @@
     "": {
       "name": "rqst",
     },
-    "Desktop": {
+    "desktop": {
       "name": "@rqst/desktop",
       "version": "0.1.0",
       "dependencies": {
@@ -16,7 +16,7 @@
         "vue": "^3.5.0",
       },
     },
-    "Mobile": {
+    "mobile": {
       "name": "@rqst/mobile",
       "version": "0.1.0",
       "dependencies": {
@@ -707,9 +707,9 @@
 
     "@rqst/contracts": ["@rqst/contracts@workspace:packages/contracts"],
 
-    "@rqst/desktop": ["@rqst/desktop@workspace:Desktop"],
+    "@rqst/desktop": ["@rqst/desktop@workspace:desktop"],
 
-    "@rqst/mobile": ["@rqst/mobile@workspace:Mobile"],
+    "@rqst/mobile": ["@rqst/mobile@workspace:mobile"],
 
     "@rqst/shared-config": ["@rqst/shared-config@workspace:packages/shared-config"],
 

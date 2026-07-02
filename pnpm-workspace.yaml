@@ -1,6 +1,6 @@
 packages:
-  - Mobile
-  - Desktop
+  - mobile
+  - desktop
   - packages/*
 peerDependencyRules:
   allowedVersions:
