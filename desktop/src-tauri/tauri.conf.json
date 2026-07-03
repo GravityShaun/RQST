@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "identifier": "com.rqst.desktop",
   "build": {
-    "beforeDevCommand": "pnpm dev",
-    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "bun run dev",
+    "devUrl": "http://127.0.0.1:3000",
     "frontendDist": "../.output/public"
   },
   "app": {

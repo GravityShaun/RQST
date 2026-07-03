@@ -15,7 +15,7 @@ from app.models import (
     User,
     UserRole,
 )
-from app.repositories.requests import get_session_queue
+from app.repositories.requests import build_request_read, build_request_reads, get_session_queue
 from app.schemas.common import MessageResponse
 from app.schemas.requests import ContributionCreate, RequestCreate, RequestRead
 from app.services.payments import create_payment
@@ -28,7 +28,13 @@ dj_router = APIRouter(prefix="/dj/requests", tags=["dj-requests"])
 @router.get("/sessions/{session_id}/queue", response_model=list[RequestRead])
 def get_queue(session_id: int, db: DBSession) -> list[RequestRead]:
     queue = get_session_queue(db, session_id)
-    return [RequestRead.model_validate(item) for item in queue]
+    return build_request_reads(db, queue)
+
+
+@router.get("/sessions/{session_id}/requests", response_model=list[RequestRead])
+def get_session_requests(session_id: int, db: DBSession) -> list[RequestRead]:
+    queue = get_session_queue(db, session_id)
+    return build_request_reads(db, queue)
 
 
 @router.post("/sessions/{session_id}/requests", response_model=RequestRead, status_code=status.HTTP_201_CREATED)
@@ -47,7 +53,7 @@ def create_request(
     existing = db.scalar(
         select(SongRequest).where(SongRequest.session_id == session_id, SongRequest.song_id == payload.song_id)
     )
-    if existing and existing.status in {RequestStatus.OPEN, RequestStatus.LOCKED, RequestStatus.CONFIRMED_BY_DJ}:
+    if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Song already exists in queue; contribute instead")
 
     profile = db.get(DJProfile, session.dj_profile_id)
@@ -83,7 +89,7 @@ def create_request(
     db.add(contribution)
     db.commit()
     db.refresh(request)
-    return RequestRead.model_validate(request)
+    return build_request_read(db, request, current_user_id=user.id)
 
 
 @router.get("/requests/{request_id}", response_model=RequestRead)
@@ -91,23 +97,24 @@ def get_request(request_id: int, db: DBSession) -> RequestRead:
     request = db.get(SongRequest, request_id)
     if not request:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
-    return RequestRead.model_validate(request)
+    return build_request_read(db, request)
 
 
-@router.post("/requests/{request_id}/contribute", response_model=MessageResponse)
+@router.post("/requests/{request_id}/contribute", response_model=RequestRead)
 def contribute_to_request(
     request_id: int,
     payload: ContributionCreate,
     db: DBSession,
     user: Annotated[User, Depends(get_current_user)],
-) -> MessageResponse:
+) -> RequestRead:
     request = db.get(SongRequest, request_id)
     if not request or request.status != RequestStatus.OPEN:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Request is not open for contributions")
+    session = db.get(DJSession, request.session_id)
     payment = create_payment(
         db=db,
         user_id=user.id,
-        dj_profile_id=db.get(DJSession, request.session_id).dj_profile_id,
+        dj_profile_id=session.dj_profile_id,
         session_id=request.session_id,
         song_request_id=request.id,
         gross_amount_cents=payload.amount_cents,
@@ -123,7 +130,26 @@ def contribute_to_request(
         )
     )
     db.commit()
-    return MessageResponse(message="Contribution checkout created")
+    db.refresh(request)
+    return build_request_read(db, request, current_user_id=user.id)
+
+
+@dj_router.get("/current", response_model=list[RequestRead])
+def get_current_dj_requests(
+    db: DBSession,
+    user: Annotated[User, Depends(require_role(UserRole.DJ, UserRole.ADMIN))],
+) -> list[RequestRead]:
+    profile = db.scalar(select(DJProfile).where(DJProfile.user_id == user.id))
+    if not profile:
+        return []
+    session = db.scalar(
+        select(DJSession)
+        .where(DJSession.dj_profile_id == profile.id)
+        .order_by(DJSession.created_at.desc(), DJSession.id.desc())
+    )
+    if not session:
+        return []
+    return build_request_reads(db, get_session_queue(db, session.id))
 
 
 @router.post("/requests/{request_id}/cancel", response_model=MessageResponse)
@@ -206,4 +232,3 @@ def lock_request(
     request.status = RequestStatus.LOCKED
     db.commit()
     return MessageResponse(message="Request locked")
-

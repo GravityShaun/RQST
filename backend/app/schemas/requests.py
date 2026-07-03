@@ -16,6 +16,17 @@ class ContributionCreate(BaseModel):
     amount_cents: int = Field(ge=1)
 
 
+class RequestContributorRead(APIModel):
+    id: int
+    user_id: int
+    display_name: str
+    avatar_url: str | None = None
+    amount_cents: int
+    currency: str
+    status: ContributionStatus
+    created_at: datetime
+
+
 class RequestRead(APIModel):
     id: int
     session_id: int
@@ -33,6 +44,23 @@ class RequestRead(APIModel):
     cancelled_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+    song_title: str | None = None
+    song_artist: str | None = None
+    song_album: str | None = None
+    song_album_art_url: str | None = None
+    dj_profile_id: int | None = None
+    dj_artist_name: str | None = None
+    venue_id: int | None = None
+    venue_name: str | None = None
+    event_id: int | None = None
+    requester_display_name: str | None = None
+    requester_avatar_url: str | None = None
+    my_contribution_cents: int = 0
+    contributor_count: int = 0
+    latest_payment_id: int | None = None
+    latest_payment_status: str | None = None
+    checkout_url: str | None = None
+    contributors: list[RequestContributorRead] = Field(default_factory=list)
 
 
 class ContributionRead(APIModel):
@@ -43,4 +71,3 @@ class ContributionRead(APIModel):
     currency: str
     status: ContributionStatus
     payment_id: int | None = None
-

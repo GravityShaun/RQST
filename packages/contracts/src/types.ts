@@ -41,3 +41,49 @@ export interface QueueItem {
   status: RequestStatus;
 }
 
+export interface RequestContributor {
+  id: number;
+  userId: number;
+  displayName: string;
+  avatarUrl?: string | null;
+  amountCents: number;
+  currency: string;
+  status: "pending_payment" | "succeeded" | "cancelled" | "refunded" | "disputed";
+  createdAt: string;
+}
+
+export interface SongRequestSummary {
+  id: number;
+  sessionId: number;
+  songId: number;
+  requestedByUserId: number;
+  status: RequestStatus;
+  originalAmountCents: number;
+  totalAmountCents: number;
+  currency: string;
+  note?: string | null;
+  rankSnapshot?: number | null;
+  confirmedByDjAt?: string | null;
+  playedAt?: string | null;
+  rejectedAt?: string | null;
+  cancelledAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  songTitle?: string | null;
+  songArtist?: string | null;
+  songAlbum?: string | null;
+  songAlbumArtUrl?: string | null;
+  djProfileId?: number | null;
+  djArtistName?: string | null;
+  venueId?: number | null;
+  venueName?: string | null;
+  eventId?: number | null;
+  requesterDisplayName?: string | null;
+  requesterAvatarUrl?: string | null;
+  myContributionCents: number;
+  contributorCount: number;
+  latestPaymentId?: number | null;
+  latestPaymentStatus?: string | null;
+  checkoutUrl?: string | null;
+  contributors: RequestContributor[];
+}

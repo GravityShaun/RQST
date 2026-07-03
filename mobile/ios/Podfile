@@ -2,6 +2,7 @@ require File.join(File.dirname(`node --print "require.resolve('expo/package.json
 require File.join(File.dirname(`node --print "require.resolve('react-native/package.json')"`), "scripts/react_native_pods")
 
 require 'json'
+require 'fileutils'
 podfile_properties = JSON.parse(File.read(File.join(__dir__, 'Podfile.properties.json'))) rescue {}
 
 ENV['RCT_NEW_ARCH_ENABLED'] = '0' if podfile_properties['newArchEnabled'] == 'false'
@@ -66,6 +67,18 @@ target 'RQST' do
       contents = File.read(fmt_base_header)
       patched = contents.gsub('#  define FMT_USE_CONSTEVAL 1', '#  define FMT_USE_CONSTEVAL 0')
       File.write(fmt_base_header, patched) if patched != contents
+    end
+
+    fblazyvector_headers = File.join(__dir__, 'Pods', 'Headers', 'Public', 'FBLazyVector')
+    fblazyvector_nested_headers = File.join(fblazyvector_headers, 'FBLazyVector')
+    if Dir.exist?(fblazyvector_nested_headers)
+      ['FBLazyIterator.h', 'FBLazyVector.h'].each do |header|
+        source = File.join(fblazyvector_nested_headers, header)
+        destination = File.join(fblazyvector_headers, header)
+        next unless File.exist?(source)
+
+        FileUtils.ln_sf(File.join('FBLazyVector', header), destination)
+      end
     end
 
     # This is necessary for Xcode 14, because it signs resource bundles by default
