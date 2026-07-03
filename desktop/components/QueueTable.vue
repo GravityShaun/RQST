@@ -6,6 +6,7 @@
       <span>Total</span>
       <span>Contributors</span>
       <span>Status</span>
+      <span>Requested</span>
     </div>
     <div v-for="item in items" :key="item.rank" class="queue-row">
       <strong class="accent">#{{ item.rank }}</strong>
@@ -16,6 +17,7 @@
       <div>{{ item.total }}</div>
       <div>{{ item.contributors }}</div>
       <div class="muted">{{ item.status }}</div>
+      <div class="muted">{{ item.requestedAt ?? "New request" }}</div>
     </div>
   </section>
 </template>
@@ -29,7 +31,7 @@ defineProps<{
     total: string;
     contributors: number;
     status: string;
+    requestedAt?: string;
   }>;
 }>();
 </script>
-

@@ -3,32 +3,103 @@ import { Link, router, type Href } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import { formatUsd } from "@rqst/shared-config";
+import { apiRouteBuilders, type SongRequestSummary } from "@rqst/contracts";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { ScreenShell, SectionTitle, SurfaceCard, Tag, premiumTheme } from "../../src/components/premium-ui";
-import { activeSession, liveQueue } from "../../src/features/rqst/mock-data";
+import { activeSession, liveQueue, type QueueItem, type RequesterContribution } from "../../src/features/rqst/mock-data";
+import { hasApiAccessToken, rqstApi, type ContributionCreatePayload } from "../../src/lib/rqst-api";
+import { unsplashImages } from "../../src/lib/unsplash";
 
 const quickAmounts = [5, 10, 15, 20, 25, 50];
 type SortKey = "song" | "price" | "rqsts";
 type SortDirection = "asc" | "desc";
 type RequesterSortKey = "chronological" | "price";
 
+function mapBackendQueueItem(request: SongRequestSummary, index: number): QueueItem {
+  const mappedContributors = request.contributors.map<RequesterContribution>((contributor) => ({
+    id: String(contributor.userId),
+    name: contributor.displayName,
+    handle: `@${contributor.displayName.toLowerCase().replace(/[^a-z0-9]+/g, "") || "rqst"}`,
+    imageUri: contributor.avatarUrl ?? unsplashImages.djPortrait,
+    bio: "",
+    neighborhood: "",
+    favoriteGenres: [],
+    requestsMade: 0,
+    boostsGiven: 0,
+    topSong: request.songTitle ?? "Requested song",
+    paidCents: contributor.amountCents,
+  }));
+  const fallbackRequester: RequesterContribution = {
+    id: String(request.requestedByUserId),
+    name: request.requesterDisplayName ?? "RQST listener",
+    handle: "@rqst",
+    imageUri: request.requesterAvatarUrl ?? unsplashImages.djPortrait,
+    bio: "",
+    neighborhood: "",
+    favoriteGenres: [],
+    requestsMade: 0,
+    boostsGiven: 0,
+    topSong: request.songTitle ?? "Requested song",
+    paidCents: request.originalAmountCents,
+  };
+  const requestedBy = mappedContributors.length ? mappedContributors : [fallbackRequester];
+
+  return {
+    id: String(request.id),
+    rank: index + 1,
+    title: request.songTitle ?? `Song #${request.songId}`,
+    artist: request.songArtist ?? "Unknown artist",
+    totalCents: request.totalAmountCents || request.originalAmountCents,
+    contributors: request.contributorCount || requestedBy.length,
+    requestedBy,
+    status: request.status === "pending_payment" ? "Pending" : request.status === "open" ? "Open" : request.status,
+    momentum: request.createdAt,
+    imageUri: request.songAlbumArtUrl ?? undefined,
+    uploadedBy:
+      requestedBy[0] ??
+      fallbackRequester,
+  };
+}
+
 export default function ListScreen() {
+  const queryClient = useQueryClient();
   const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
   const [selectedRequesterSongId, setSelectedRequesterSongId] = useState<string | null>(null);
   const [selectedAmount, setSelectedAmount] = useState("10");
   const [customAmount, setCustomAmount] = useState("");
+  const [localQueue, setLocalQueue] = useState(liveQueue);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("price");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [requesterSortKey, setRequesterSortKey] = useState<RequesterSortKey>("chronological");
   const [requesterSortDirection, setRequesterSortDirection] = useState<SortDirection>("asc");
+  const sessionId = activeSession.id;
+  const sessionRequestsQuery = useQuery({
+    queryKey: ["sessionRequests", sessionId],
+    queryFn: () => rqstApi<SongRequestSummary[]>(apiRouteBuilders.sessionRequests(sessionId).replace("/api/v1", ""), { auth: false }),
+    retry: false,
+  });
+  const contributeMutation = useMutation({
+    mutationFn: ({ requestId, amountCents }: { requestId: string; amountCents: number }) =>
+      rqstApi<SongRequestSummary>(apiRouteBuilders.contributeToRequest(requestId).replace("/api/v1", ""), {
+        method: "POST",
+        body: JSON.stringify({ amount_cents: amountCents } satisfies ContributionCreatePayload),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sessionRequests", sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["meRequests"] });
+    },
+    retry: false,
+  });
+  const queue = sessionRequestsQuery.data?.map(mapBackendQueueItem) ?? localQueue;
 
   const sortedQueue = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     const filteredQueue = normalizedQuery
-      ? liveQueue.filter((item) =>
+      ? queue.filter((item) =>
           [
             item.title,
             item.artist,
@@ -40,7 +111,7 @@ export default function ListScreen() {
             .toLowerCase()
             .includes(normalizedQuery),
         )
-      : liveQueue;
+      : queue;
 
     return [...filteredQueue].sort((left, right) => {
       const directionMultiplier = sortDirection === "asc" ? 1 : -1;
@@ -57,10 +128,10 @@ export default function ListScreen() {
 
       return result === 0 ? fallbackSort : result * directionMultiplier;
     });
-  }, [searchQuery, sortDirection, sortKey]);
+  }, [queue, searchQuery, sortDirection, sortKey]);
 
-  const selectedSong = liveQueue.find((item) => item.id === selectedSongId) ?? null;
-  const selectedRequesterSong = liveQueue.find((item) => item.id === selectedRequesterSongId) ?? null;
+  const selectedSong = queue.find((item) => item.id === selectedSongId) ?? null;
+  const selectedRequesterSong = queue.find((item) => item.id === selectedRequesterSongId) ?? null;
   const selectedRequesterList = useMemo(() => {
     const requesters = selectedRequesterSong?.requestedBy ?? [];
 
@@ -74,9 +145,42 @@ export default function ListScreen() {
   }, [requesterSortDirection, requesterSortKey, selectedRequesterSong]);
   const modalAmountDollars = customAmount ? Number(customAmount || 0) : Number(selectedAmount || 0);
   const modalAmountCents = Math.max(Number.isFinite(modalAmountDollars) ? modalAmountDollars : 0, 0) * 100;
+  const canSubmitContribution = Boolean(selectedSong) && selectedSong?.status === "Open" && modalAmountCents > 0;
+  const handleSubmitContribution = async () => {
+    if (!selectedSong || !canSubmitContribution) {
+      return;
+    }
+
+    const numericRequestId = Number(selectedSong.id);
+    if (hasApiAccessToken && Number.isInteger(numericRequestId)) {
+      try {
+        await contributeMutation.mutateAsync({ requestId: selectedSong.id, amountCents: modalAmountCents });
+        setSelectedSongId(null);
+        return;
+      } catch {
+        // Keep local demo mode responsive when auth/backend checkout is unavailable.
+      }
+    }
+
+    setLocalQueue((currentQueue) =>
+      currentQueue.map((item) =>
+        item.id === selectedSong.id
+          ? {
+              ...item,
+              totalCents: item.totalCents + modalAmountCents,
+            }
+          : item,
+      ),
+    );
+    setSelectedSongId(null);
+  };
   const openRequesters = (itemId: string) => {
-    const item = liveQueue.find((queueItem) => queueItem.id === itemId);
+    const item = queue.find((queueItem) => queueItem.id === itemId);
     if (!item) {
+      return;
+    }
+
+    if (item.requestedBy.length === 0) {
       return;
     }
 
@@ -235,7 +339,7 @@ export default function ListScreen() {
                 <Text style={styles.rqstsCell}>{item.requestedBy.length}</Text>
                 <Image
                   resizeMode="cover"
-                  source={{ uri: item.requestedBy[0].imageUri }}
+                  source={{ uri: item.requestedBy[0]?.imageUri ?? item.uploadedBy.imageUri }}
                   style={styles.requesterAvatar}
                 />
               </Pressable>
@@ -325,8 +429,14 @@ export default function ListScreen() {
               </View>
             </ScrollView>
 
-            <Pressable style={styles.modalCta}>
-              <Text style={styles.modalCtaText}>{`Add ${formatUsd(modalAmountCents)}`}</Text>
+            <Pressable
+              disabled={!canSubmitContribution || contributeMutation.isPending}
+              onPress={handleSubmitContribution}
+              style={[styles.modalCta, (!canSubmitContribution || contributeMutation.isPending) && styles.modalCtaDisabled]}
+            >
+              <Text style={styles.modalCtaText}>
+                {contributeMutation.isPending ? "Adding" : `Add ${formatUsd(modalAmountCents)}`}
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -600,6 +710,9 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     justifyContent: "center",
     paddingVertical: 16,
+  },
+  modalCtaDisabled: {
+    opacity: 0.45,
   },
   modalCtaText: {
     color: premiumTheme.colors.text,

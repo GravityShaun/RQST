@@ -50,14 +50,18 @@ export type UserRequest = {
   title: string;
   artist: string;
   imageUri?: string;
+  submittedAt: string;
+  djName: string;
   venue: string;
+  requestedAmountCents: number;
   totalCents: number;
   myContributionCents: number;
-  status: "Open" | "Locked" | "Played" | "Canceled";
+  status: "Pending" | "Open" | "Locked" | "Played" | "Canceled";
   canCancel: boolean;
 };
 
 export const activeSession = {
+  id: 1,
   venue: "Moonlight Room",
   djName: "DJ Solace",
   event: "Friday Fever",
@@ -370,17 +374,23 @@ export const initialUserRequests: UserRequest[] = [
     id: "request-1",
     title: "Midnight City",
     artist: "M83",
+    submittedAt: "2026-07-03T21:18:00-04:00",
+    djName: "DJ Solace",
     venue: "Moonlight Room",
+    requestedAmountCents: 900,
     totalCents: 1800,
     myContributionCents: 900,
     status: "Open",
-    canCancel: true,
+    canCancel: false,
   },
   {
     id: "request-2",
     title: "Levels",
     artist: "Avicii",
+    submittedAt: "2026-07-03T20:44:00-04:00",
+    djName: "DJ Solace",
     venue: "Moonlight Room",
+    requestedAmountCents: 1200,
     totalCents: 2600,
     myContributionCents: 1200,
     status: "Played",
@@ -390,7 +400,10 @@ export const initialUserRequests: UserRequest[] = [
     id: "request-3",
     title: "Mirrors",
     artist: "Justin Timberlake",
+    submittedAt: "2026-07-02T23:12:00-04:00",
+    djName: "Mina Flux",
     venue: "Velvet Radio",
+    requestedAmountCents: 600,
     totalCents: 1400,
     myContributionCents: 600,
     status: "Locked",

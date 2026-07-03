@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     polar_webhook_secret: str = "polar-dev-secret"
     platform_fee_bps: int = 1200
     currency: str = "USD"
+    apple_music_media_id: str = "media.com.rqst.applemusic"
+    apple_music_key_id: str = "K3ATP7UXT7"
+    apple_music_team_id: str = "GCTR3K3TR2"
     apple_music_developer_token: str | None = None
     apple_music_storefront: str = "us"
 

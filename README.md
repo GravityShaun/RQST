@@ -37,6 +37,16 @@ python3 -m pip install -e .[dev]
 pytest
 ```
 
+Backend Apple Music env:
+
+```bash
+RQST_APPLE_MUSIC_MEDIA_ID=media.com.rqst.applemusic
+RQST_APPLE_MUSIC_KEY_ID=K3ATP7UXT7
+RQST_APPLE_MUSIC_TEAM_ID=GCTR3K3TR2
+RQST_APPLE_MUSIC_DEVELOPER_TOKEN=your-apple-music-developer-token
+RQST_APPLE_MUSIC_STOREFRONT=us
+```
+
 ## Source Of Truth Docs
 
 - [Product Requirements](./docs/prd.md)

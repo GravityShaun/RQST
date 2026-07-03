@@ -22,15 +22,23 @@ def search_songs(
     db: DBSession,
     q: str = Query(min_length=2, max_length=120),
     artist: str | None = Query(default=None, min_length=2, max_length=120),
-    limit: int = Query(default=10, ge=1, le=25),
+    limit: int = Query(default=10, ge=1, le=50),
 ) -> list[MusicSearchResult]:
     settings = get_settings()
     artist_query = " ".join(artist.split()) if artist else None
     try:
-        song_limit = 25 if artist_query else max(1, min(limit, 18))
-        artist_limit = min(6, max(2, limit // 3))
-        search_limit = min(25, max(song_limit, song_limit + artist_limit))
-        search_term = f"{artist_query} {q}" if artist_query else q
+        artist_limit = 0 if artist_query else min(6, max(2, limit // 8))
+        song_limit = limit if artist_query else max(1, limit - artist_limit)
+        search_limit = max(song_limit, artist_limit)
+        normalized_q = " ".join(q.split()).casefold()
+        normalized_artist = artist_query.casefold() if artist_query else None
+        search_term = (
+            artist_query
+            if artist_query and normalized_q == normalized_artist
+            else f"{artist_query} {q}"
+            if artist_query
+            else q
+        )
         search_results = search_catalog(
             search_term,
             developer_token=settings.apple_music_developer_token,
@@ -101,7 +109,7 @@ def search_songs(
         results.append(_artist_result(artist))
 
     db.commit()
-    return results
+    return results[:limit]
 
 
 @router.get("/{song_id}", response_model=SongRead)

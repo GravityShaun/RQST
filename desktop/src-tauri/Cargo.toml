@@ -1,0 +1,17 @@
+[package]
+name = "rqst-desktop"
+version = "0.1.0"
+description = "RQST DJ Console"
+authors = ["RQST"]
+edition = "2021"
+rust-version = "1.86"
+
+[lib]
+name = "rqst_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
