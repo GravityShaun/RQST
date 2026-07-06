@@ -1,4 +1,5 @@
 from urllib.error import HTTPError
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
@@ -103,9 +104,7 @@ def test_search_catalog_normalizes_apple_music_payload(monkeypatch: pytest.Monke
     assert results.artists[0].genre_names == ["Dance", "Electronic"]
 
 
-def test_search_catalog_uses_itunes_fallback_without_developer_token(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_search_catalog_caps_apple_music_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeResponse:
         def __enter__(self):
             return self
@@ -114,7 +113,59 @@ def test_search_catalog_uses_itunes_fallback_without_developer_token(
             return None
 
         def read(self) -> bytes:
-            return b"""
+            return b"""{"results": {"songs": {"data": []}, "artists": {"data": []}}}"""
+
+    def fake_urlopen(request, timeout: int):
+        assert timeout == 4
+        query = parse_qs(urlparse(request.full_url).query)
+        assert query["limit"] == ["25"]
+        return FakeResponse()
+
+    monkeypatch.setattr(apple_music, "urlopen", fake_urlopen)
+
+    search_catalog("The", developer_token="dev-token", limit=50)
+
+
+def test_search_catalog_uses_itunes_fallback_without_developer_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = []
+
+    class FakeResponse:
+        def __init__(self, body: bytes) -> None:
+            self.body = body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self) -> bytes:
+            return self.body
+
+    def fake_urlopen(request, timeout: int):
+        assert timeout == 4
+        assert "itunes.apple.com" in request.full_url
+        query = parse_qs(urlparse(request.full_url).query)
+        calls.append(query["entity"][0])
+        if query["entity"] == ["musicArtist"]:
+            return FakeResponse(
+                b"""
+                {
+                  "results": [
+                    {
+                      "wrapperType": "artist",
+                      "artistId": 5468295,
+                      "artistName": "Daft Punk",
+                      "primaryGenreName": "Electronic"
+                    }
+                  ]
+                }
+                """
+            )
+        return FakeResponse(
+            b"""
             {
               "results": [
                 {
@@ -126,17 +177,15 @@ def test_search_catalog_uses_itunes_fallback_without_developer_token(
               ]
             }
             """
-
-    def fake_urlopen(request, timeout: int):
-        assert timeout == 4
-        assert "itunes.apple.com" in request.full_url
-        return FakeResponse()
+        )
 
     monkeypatch.setattr(apple_music, "urlopen", fake_urlopen)
 
     results = search_catalog("one more time", developer_token=None)
 
+    assert calls == ["musicTrack", "musicArtist"]
     assert results.songs[0].title == "One More Time"
+    assert results.artists[0].name == "Daft Punk"
 
 
 def test_search_catalog_falls_back_to_itunes_when_token_is_rejected(
@@ -191,6 +240,47 @@ def test_search_catalog_falls_back_to_itunes_when_token_is_rejected(
     assert results.songs[0].apple_music_id == "1440857781"
     assert results.songs[0].album_art_url == "https://is1-ssl.mzstatic.com/image/thumb/Music/600x600bb.jpg"
     assert results.artists[0].name == "Daft Punk"
+
+
+def test_search_catalog_falls_back_to_itunes_when_apple_rejects_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self) -> bytes:
+            return b"""
+            {
+              "results": [
+                {
+                  "wrapperType": "track",
+                  "trackId": 1440857781,
+                  "trackName": "One More Time",
+                  "artistName": "Daft Punk"
+                }
+              ]
+            }
+            """
+
+    def fake_urlopen(request, timeout: int):
+        calls.append(request.full_url)
+        if "api.music.apple.com" in request.full_url:
+            raise HTTPError(request.full_url, 400, "Bad Request", hdrs=None, fp=None)
+        return FakeResponse()
+
+    monkeypatch.setattr(apple_music, "urlopen", fake_urlopen)
+
+    results = search_catalog("The", developer_token="dev-token", limit=50, include_artists=False)
+
+    assert "api.music.apple.com" in calls[0]
+    assert "itunes.apple.com" in calls[1]
+    assert results.songs[0].title == "One More Time"
 
 
 def test_search_catalog_wraps_transport_errors(monkeypatch: pytest.MonkeyPatch) -> None:

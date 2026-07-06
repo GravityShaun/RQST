@@ -1,41 +1,77 @@
-import { useMemo, useState } from "react";
-import { Link, router, type Href } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
+import { Link, router, useLocalSearchParams, type Href } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
+import { Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import { formatUsd } from "@rqst/shared-config";
-import { apiRouteBuilders, type SongRequestSummary } from "@rqst/contracts";
+import { apiRouteBuilders, apiRoutes, type SongRequestSummary } from "@rqst/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsFocused, useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { ScreenShell, SectionTitle, SurfaceCard, Tag, premiumTheme } from "../../src/components/premium-ui";
-import { activeSession, liveQueue, type QueueItem, type RequesterContribution } from "../../src/features/rqst/mock-data";
-import { hasApiAccessToken, rqstApi, type ContributionCreatePayload } from "../../src/lib/rqst-api";
+import { RequestCancelAction } from "../../src/components/RequestCancelAction";
+import { DirectorySearch } from "../../src/features/discover/DirectorySearch";
+import { liveQueue, type QueueItem, type RequesterContribution } from "../../src/features/rqst/mock-data";
+import { rqstApi, type ContributionCreatePayload } from "../../src/lib/rqst-api";
+import { isActiveQueueStatus } from "../../src/lib/SessionQueueSync";
+import { canCancelRequest, getPendingCancelExpiresAt } from "../../src/lib/request-cancel";
+import { useRequestCancel } from "../../src/lib/use-request-cancel";
+import { useActiveSession } from "../../src/lib/use-active-session";
+import { useAuthStore } from "../../src/store/auth";
+import { usePendingCancelStore } from "../../src/store/pending-cancel";
+import { useAppStore } from "../../src/store/app";
+import { resolveAvatarUrl } from "../../src/lib/avatar";
 import { unsplashImages } from "../../src/lib/unsplash";
 
 const quickAmounts = [5, 10, 15, 20, 25, 50];
+const listRefreshIntervalMs = 30_000;
+
+function resolveRequesterImageUri(avatarUrl?: string | null): string {
+  return resolveAvatarUrl(avatarUrl) ?? unsplashImages.djPortrait;
+}
 type SortKey = "song" | "price" | "rqsts";
 type SortDirection = "asc" | "desc";
 type RequesterSortKey = "chronological" | "price";
 
+function aggregateContributorsByUser(
+  request: SongRequestSummary,
+): RequesterContribution[] {
+  const byUserId = new Map<string, RequesterContribution>();
+
+  for (const contributor of request.contributors) {
+    const userId = String(contributor.userId);
+    const existing = byUserId.get(userId);
+
+    if (existing) {
+      existing.paidCents += contributor.amountCents;
+      continue;
+    }
+
+    byUserId.set(userId, {
+      id: userId,
+      name: contributor.displayName,
+      handle: `@${contributor.displayName.toLowerCase().replace(/[^a-z0-9]+/g, "") || "rqst"}`,
+      imageUri: resolveRequesterImageUri(contributor.avatarUrl),
+      bio: "",
+      neighborhood: "",
+      favoriteGenres: [],
+      requestsMade: 0,
+      boostsGiven: 0,
+      topSong: request.songTitle ?? "Requested song",
+      paidCents: contributor.amountCents,
+    });
+  }
+
+  return Array.from(byUserId.values());
+}
+
 function mapBackendQueueItem(request: SongRequestSummary, index: number): QueueItem {
-  const mappedContributors = request.contributors.map<RequesterContribution>((contributor) => ({
-    id: String(contributor.userId),
-    name: contributor.displayName,
-    handle: `@${contributor.displayName.toLowerCase().replace(/[^a-z0-9]+/g, "") || "rqst"}`,
-    imageUri: contributor.avatarUrl ?? unsplashImages.djPortrait,
-    bio: "",
-    neighborhood: "",
-    favoriteGenres: [],
-    requestsMade: 0,
-    boostsGiven: 0,
-    topSong: request.songTitle ?? "Requested song",
-    paidCents: contributor.amountCents,
-  }));
+  const mappedContributors = aggregateContributorsByUser(request);
   const fallbackRequester: RequesterContribution = {
     id: String(request.requestedByUserId),
     name: request.requesterDisplayName ?? "RQST listener",
     handle: "@rqst",
-    imageUri: request.requesterAvatarUrl ?? unsplashImages.djPortrait,
+    imageUri: resolveRequesterImageUri(request.requesterAvatarUrl),
     bio: "",
     neighborhood: "",
     favoriteGenres: [],
@@ -45,14 +81,15 @@ function mapBackendQueueItem(request: SongRequestSummary, index: number): QueueI
     paidCents: request.originalAmountCents,
   };
   const requestedBy = mappedContributors.length ? mappedContributors : [fallbackRequester];
+  const contributorCount = request.contributorCount || requestedBy.length;
 
   return {
     id: String(request.id),
     rank: index + 1,
     title: request.songTitle ?? `Song #${request.songId}`,
     artist: request.songArtist ?? "Unknown artist",
-    totalCents: request.totalAmountCents || request.originalAmountCents,
-    contributors: request.contributorCount || requestedBy.length,
+    totalCents: request.totalPoolCents ?? request.totalAmountCents ?? 0,
+    contributors: contributorCount,
     requestedBy,
     status: request.status === "pending_payment" ? "Pending" : request.status === "open" ? "Open" : request.status,
     momentum: request.createdAt,
@@ -65,21 +102,34 @@ function mapBackendQueueItem(request: SongRequestSummary, index: number): QueueI
 
 export default function ListScreen() {
   const queryClient = useQueryClient();
+  const navigation = useNavigation();
+  const isScreenFocused = useIsFocused();
+  const localQueueRequests = useAppStore((state) => state.localQueueRequests);
+  const { sessionId, djName, venueName, djSlug, hasSession } = useActiveSession({ requireSelection: true });
+  const isSignedIn = useAuthStore((state) => state.status === "authenticated" && Boolean(state.accessToken));
+  const currentUserId = useAuthStore((state) => state.user?.id ?? null);
+  const { cancelRequest } = useRequestCancel();
+  const pendingExpiresById = usePendingCancelStore((state) => state.expiresByRequestId);
+  const pruneExpiredPendingCancels = usePendingCancelStore((state) => state.pruneExpired);
+  const [expiredCancelIds, setExpiredCancelIds] = useState<Set<number>>(() => new Set());
   const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
   const [selectedRequesterSongId, setSelectedRequesterSongId] = useState<string | null>(null);
   const [selectedAmount, setSelectedAmount] = useState("10");
   const [customAmount, setCustomAmount] = useState("");
   const [localQueue, setLocalQueue] = useState(liveQueue);
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("price");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [requesterSortKey, setRequesterSortKey] = useState<RequesterSortKey>("chronological");
   const [requesterSortDirection, setRequesterSortDirection] = useState<SortDirection>("asc");
-  const sessionId = activeSession.id;
+  const [contributionError, setContributionError] = useState("");
   const sessionRequestsQuery = useQuery({
     queryKey: ["sessionRequests", sessionId],
-    queryFn: () => rqstApi<SongRequestSummary[]>(apiRouteBuilders.sessionRequests(sessionId).replace("/api/v1", ""), { auth: false }),
+    queryFn: () =>
+      rqstApi<SongRequestSummary[]>(apiRouteBuilders.sessionRequests(sessionId as number).replace("/api/v1", ""), {
+        auth: false,
+      }),
+    enabled: sessionId != null,
     retry: false,
   });
   const contributeMutation = useMutation({
@@ -88,32 +138,38 @@ export default function ListScreen() {
         method: "POST",
         body: JSON.stringify({ amount_cents: amountCents } satisfies ContributionCreatePayload),
       }),
-    onSuccess: () => {
+    onSuccess: (updatedRequest) => {
+      queryClient.setQueryData<SongRequestSummary[]>(["sessionRequests", sessionId], (currentRequests = []) =>
+        currentRequests.map((request) => (request.id === updatedRequest.id ? updatedRequest : request)),
+      );
+      queryClient.setQueryData<SongRequestSummary[]>(["meRequests"], (currentRequests = []) => {
+        const existingIndex = currentRequests.findIndex((request) => request.id === updatedRequest.id);
+        if (existingIndex === -1) {
+          return [updatedRequest, ...currentRequests];
+        }
+
+        return currentRequests.map((request) => (request.id === updatedRequest.id ? updatedRequest : request));
+      });
       queryClient.invalidateQueries({ queryKey: ["sessionRequests", sessionId] });
       queryClient.invalidateQueries({ queryKey: ["meRequests"] });
     },
     retry: false,
   });
-  const queue = sessionRequestsQuery.data?.map(mapBackendQueueItem) ?? localQueue;
+  const sessionRequestsById = useMemo(
+    () => new Map((sessionRequestsQuery.data ?? []).map((request) => [request.id, request])),
+    [sessionRequestsQuery.data],
+  );
+  const queue =
+    hasSession && sessionRequestsQuery.data
+      ? sessionRequestsQuery.data
+          .filter((request) => isActiveQueueStatus(request.status))
+          .map(mapBackendQueueItem)
+      : hasSession
+        ? [...localQueueRequests, ...localQueue]
+        : [];
 
   const sortedQueue = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
-    const filteredQueue = normalizedQuery
-      ? queue.filter((item) =>
-          [
-            item.title,
-            item.artist,
-            ...item.requestedBy.map((requester) => requester.name),
-            String(item.requestedBy.length),
-            formatUsd(item.totalCents),
-          ]
-            .join(" ")
-            .toLowerCase()
-            .includes(normalizedQuery),
-        )
-      : queue;
-
-    return [...filteredQueue].sort((left, right) => {
+    return [...queue].sort((left, right) => {
       const directionMultiplier = sortDirection === "asc" ? 1 : -1;
       const fallbackSort = left.rank - right.rank;
       let result = 0;
@@ -121,14 +177,55 @@ export default function ListScreen() {
       if (sortKey === "song") {
         result = `${left.title} ${left.artist}`.localeCompare(`${right.title} ${right.artist}`);
       } else if (sortKey === "rqsts") {
-        result = left.requestedBy.length - right.requestedBy.length;
+        result = left.contributors - right.contributors;
       } else {
         result = left.totalCents - right.totalCents;
       }
 
       return result === 0 ? fallbackSort : result * directionMultiplier;
     });
-  }, [queue, searchQuery, sortDirection, sortKey]);
+  }, [queue, sortDirection, sortKey]);
+
+  useEffect(() => {
+    pruneExpiredPendingCancels();
+    const interval = setInterval(() => {
+      pruneExpiredPendingCancels();
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [pruneExpiredPendingCancels]);
+
+  const refreshSessionQueue = sessionRequestsQuery.refetch;
+
+  useEffect(() => {
+    if (!isScreenFocused || sessionId == null) {
+      return;
+    }
+
+    void refreshSessionQueue();
+  }, [isScreenFocused, refreshSessionQueue, sessionId]);
+
+  useEffect(() => {
+    if (!isScreenFocused || sessionId == null) {
+      return undefined;
+    }
+
+    const interval = setInterval(() => {
+      void refreshSessionQueue();
+    }, listRefreshIntervalMs);
+
+    return () => clearInterval(interval);
+  }, [isScreenFocused, refreshSessionQueue, sessionId]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("tabPress", () => {
+      if (sessionId != null) {
+        void refreshSessionQueue();
+      }
+    });
+
+    return unsubscribe;
+  }, [navigation, refreshSessionQueue, sessionId]);
 
   const selectedSong = queue.find((item) => item.id === selectedSongId) ?? null;
   const selectedRequesterSong = queue.find((item) => item.id === selectedRequesterSongId) ?? null;
@@ -151,14 +248,28 @@ export default function ListScreen() {
       return;
     }
 
+    setContributionError("");
     const numericRequestId = Number(selectedSong.id);
-    if (hasApiAccessToken && Number.isInteger(numericRequestId)) {
+    const isBackendRequest = Number.isInteger(numericRequestId);
+
+    if (isBackendRequest) {
+      if (!isSignedIn) {
+        setContributionError("Sign in is required to add money to this song.");
+        router.push("/(auth)/login");
+        return;
+      }
+
       try {
         await contributeMutation.mutateAsync({ requestId: selectedSong.id, amountCents: modalAmountCents });
         setSelectedSongId(null);
+        setSelectedAmount("10");
+        setCustomAmount("");
         return;
-      } catch {
-        // Keep local demo mode responsive when auth/backend checkout is unavailable.
+      } catch (error) {
+        setContributionError(
+          error instanceof Error ? error.message : "Could not add money to this song. Please try again.",
+        );
+        return;
       }
     }
 
@@ -173,6 +284,8 @@ export default function ListScreen() {
       ),
     );
     setSelectedSongId(null);
+    setSelectedAmount("10");
+    setCustomAmount("");
   };
   const openRequesters = (itemId: string) => {
     const item = queue.find((queueItem) => queueItem.id === itemId);
@@ -180,11 +293,11 @@ export default function ListScreen() {
       return;
     }
 
-    if (item.requestedBy.length === 0) {
+    if (item.contributors === 0) {
       return;
     }
 
-    if (item.requestedBy.length === 1) {
+    if (item.contributors === 1) {
       router.push(`/profile/${item.requestedBy[0].id}` as Href);
       return;
     }
@@ -248,7 +361,18 @@ export default function ListScreen() {
   );
 
   return (
-    <ScreenShell contentContainerStyle={styles.screenContent}>
+    <ScreenShell
+      contentContainerStyle={styles.screenContent}
+      refreshControl={
+        <RefreshControl
+          refreshing={sessionRequestsQuery.isRefetching}
+          onRefresh={() => {
+            void sessionRequestsQuery.refetch();
+          }}
+          tintColor="#C95A52"
+        />
+      }
+    >
       <View style={styles.contentInset}>
         <View style={styles.topBar}>
           <View style={styles.topBarLeft}>
@@ -256,126 +380,169 @@ export default function ListScreen() {
               <Ionicons name="sparkles" size={20} color={premiumTheme.colors.background} />
             </Pressable>
             <Pressable
-              accessibilityLabel="Search queue"
+              accessibilityLabel="Find a DJ or venue"
               accessibilityRole="button"
-              onPress={() => setIsSearchOpen((currentValue) => !currentValue)}
-              style={[styles.circleButton, isSearchOpen && styles.circleButtonActive]}
+              onPress={() => setIsPickerOpen((currentValue) => !currentValue)}
+              style={[styles.circleButton, (isPickerOpen || !hasSession) && styles.circleButtonActive]}
             >
               <Ionicons name="search" size={20} color={premiumTheme.colors.ink} />
             </Pressable>
           </View>
-          <Tag label={activeSession.venue} tone="gold" icon="location-outline" />
+          <Tag
+            label={hasSession ? (venueName ?? "Live venue") : "Pick a room"}
+            tone="gold"
+            icon="location-outline"
+          />
         </View>
       </View>
 
-      {isSearchOpen ? (
+      {isPickerOpen ? (
         <View style={styles.contentInset}>
-          <View style={styles.searchPanel}>
-            <Ionicons name="search" size={18} color={premiumTheme.colors.inkMuted} />
-            <TextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              clearButtonMode="while-editing"
-              onChangeText={setSearchQuery}
-              placeholder="Search songs, artists, requesters"
-              placeholderTextColor={premiumTheme.colors.inkMuted}
-              style={styles.searchInput}
-              value={searchQuery}
-            />
-            {searchQuery ? (
-              <Pressable accessibilityLabel="Clear search" onPress={() => setSearchQuery("")} style={styles.searchClearButton}>
-                <Ionicons name="close" size={16} color={premiumTheme.colors.ink} />
-              </Pressable>
-            ) : null}
-          </View>
+          <DirectorySearch
+            defaultViewMode="browse"
+            hideDjActions
+            liveOnly
+            onLiveSessionSelected={() => setIsPickerOpen(false)}
+          />
         </View>
       ) : null}
 
-      <View style={styles.contentInset}>
-        <Link href="/dj" asChild>
-          <Pressable style={styles.identityPanel}>
-            <LinearGradient colors={["#FFD2C8", "#F4B8CF", "#E8D9FF"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.identityPill, styles.identityPillDj]}>
-              <Text style={styles.identityEyebrow}>DJ playing</Text>
-              <Text style={styles.identityValue}>{activeSession.djName}</Text>
-            </LinearGradient>
-            <LinearGradient colors={["#CFE8FF", "#D9F3F0"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.identityPill, styles.identityPillVenue]}>
-              <Text style={styles.identityEyebrow}>Venue</Text>
-            </LinearGradient>
-          </Pressable>
-        </Link>
-      </View>
-
-      <View style={styles.contentInset}>
-        <SectionTitle
-          title="Requested songs"
-          subtitle="The artist or DJ can choose to play each of the requested songs."
-        />
-      </View>
-
-      <SurfaceCard style={styles.tableCard}>
-        <View style={styles.table}>
-          <View style={[styles.tableRow, styles.tableHeaderRow]}>
-            {renderSortableHeader("Rqsts", "rqsts", styles.rqstsColumn)}
-            {renderSortableHeader("Song", "song", styles.songColumn)}
-            {renderSortableHeader("Price", "price", styles.priceColumn)}
-            <Text style={[styles.tableHeaderCell, styles.actionColumn]}> </Text>
+      {hasSession ? (
+        <>
+          <View style={styles.contentInset}>
+            <Link href={(djSlug ? `/dj?slug=${encodeURIComponent(djSlug)}` : "/dj") as Href} asChild>
+              <Pressable style={styles.identityPanel}>
+                <LinearGradient colors={["#FFD2C8", "#F4B8CF", "#E8D9FF"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.identityPill, styles.identityPillDj]}>
+                  <Text style={styles.identityEyebrow}>DJ playing</Text>
+                  <Text style={styles.identityValue}>{djName}</Text>
+                </LinearGradient>
+                <LinearGradient colors={["#CFE8FF", "#D9F3F0"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.identityPill, styles.identityPillVenue]}>
+                  <Text style={styles.identityEyebrow}>Venue</Text>
+                  <Text style={styles.identityValue}>{venueName}</Text>
+                </LinearGradient>
+              </Pressable>
+            </Link>
           </View>
 
-          {sortedQueue.map((item, index) => (
-            <View
-              key={item.id}
-              style={[styles.tableRow, styles.tableBodyDivider]}
-            >
-              <Pressable
-                accessibilityLabel={
-                  item.requestedBy.length === 1
-                    ? `Open ${item.requestedBy[0].name}'s profile`
-                    : `Show ${item.requestedBy.length} requesters for ${item.title}`
-                }
-                accessibilityRole="button"
-                onPress={() => openRequesters(item.id)}
-                style={styles.rqstsButton}
-              >
-                <Text style={styles.rqstsCell}>{item.requestedBy.length}</Text>
-                <Image
-                  resizeMode="cover"
-                  source={{ uri: item.requestedBy[0]?.imageUri ?? item.uploadedBy.imageUri }}
-                  style={styles.requesterAvatar}
-                />
-              </Pressable>
-              <View style={styles.songColumn}>
-                <Text style={styles.songTitle}>
-                  {item.title}
-                </Text>
-                <Text style={styles.songArtist} numberOfLines={1}>
-                  {item.artist}
-                </Text>
+          <View style={styles.contentInset}>
+            <SectionTitle
+              title="Requested songs"
+              subtitle="The artist or DJ can choose to play each of the requested songs."
+            />
+          </View>
+
+          <SurfaceCard style={styles.tableCard}>
+            <View style={styles.table}>
+              <View style={[styles.tableRow, styles.tableHeaderRow]}>
+                {renderSortableHeader("Rqsts", "rqsts", styles.rqstsColumn)}
+                {renderSortableHeader("Song", "song", styles.songColumn)}
+                {renderSortableHeader("Price", "price", styles.priceColumn)}
+                <Text style={[styles.tableHeaderCell, styles.actionColumn]}> </Text>
               </View>
-              <Text style={[styles.tableCell, styles.priceColumn, styles.supportCell]}>
-                {formatUsd(item.totalCents)}
-              </Text>
-              <View style={styles.actionColumn}>
-                <Pressable
-                  onPress={() => {
-                    setSelectedSongId(item.id);
-                    setSelectedAmount("10");
-                    setCustomAmount("");
-                  }}
-                  style={styles.arrowButton}
-                >
-                  <Ionicons name="arrow-up" size={13} color="#C95A52" />
-                </Pressable>
-              </View>
+
+              {sortedQueue.map((item) => {
+                const backendRequest = sessionRequestsById.get(Number(item.id));
+                const cancelExpiresAt =
+                  backendRequest && !expiredCancelIds.has(backendRequest.id)
+                    ? getPendingCancelExpiresAt(backendRequest.id, pendingExpiresById)
+                    : null;
+                const showCancelAction =
+                  backendRequest != null &&
+                  cancelExpiresAt != null &&
+                  canCancelRequest(backendRequest, currentUserId, pendingExpiresById);
+
+                return (
+                  <View key={item.id} style={[styles.tableRow, styles.tableBodyDivider]}>
+                  <Pressable
+                    accessibilityLabel={
+                      item.contributors === 1
+                        ? `Open ${item.requestedBy[0].name}'s profile`
+                        : `Show ${item.contributors} requesters for ${item.title}`
+                    }
+                    accessibilityRole="button"
+                    onPress={() => openRequesters(item.id)}
+                    style={styles.rqstsButton}
+                  >
+                    <Text style={styles.rqstsCell}>{item.contributors}</Text>
+                    <Image
+                      resizeMode="cover"
+                      source={{ uri: item.requestedBy[0]?.imageUri ?? item.uploadedBy.imageUri }}
+                      style={styles.requesterAvatar}
+                    />
+                  </Pressable>
+                  <View style={styles.songColumn}>
+                    <Text style={styles.songTitle}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.songArtist} numberOfLines={1}>
+                      {item.artist}
+                    </Text>
+                    {showCancelAction && cancelExpiresAt != null ? (
+                      <RequestCancelAction
+                        expiresAt={cancelExpiresAt}
+                        onCancel={cancelRequest}
+                        onExpired={() => {
+                          setExpiredCancelIds((currentIds) => {
+                            const nextIds = new Set(currentIds);
+                            nextIds.add(backendRequest.id);
+                            return nextIds;
+                          });
+                        }}
+                        requestId={backendRequest.id}
+                        variant="inline"
+                      />
+                    ) : null}
+                  </View>
+                  <Text style={[styles.tableCell, styles.priceColumn, styles.supportCell]}>
+                    {formatUsd(item.totalCents)}
+                  </Text>
+                  <View style={styles.actionColumn}>
+                    <Pressable
+                      onPress={() => {
+                        setContributionError("");
+                        setSelectedSongId(item.id);
+                        setSelectedAmount("10");
+                        setCustomAmount("");
+                      }}
+                      style={styles.arrowButton}
+                    >
+                      <Ionicons name="arrow-up" size={13} color="#C95A52" />
+                    </Pressable>
+                  </View>
+                  </View>
+                );
+              })}
+              {sortedQueue.length === 0 ? (
+                <View style={styles.emptyRow}>
+                  <Text style={styles.emptyTitle}>No songs in the queue yet</Text>
+                  <Text style={styles.emptySubtitle}>Be the first to request a song for this set.</Text>
+                </View>
+              ) : null}
             </View>
-          ))}
-          {sortedQueue.length === 0 ? (
+          </SurfaceCard>
+        </>
+      ) : !isPickerOpen ? (
+        <View style={styles.contentInset}>
+          <SurfaceCard style={styles.pickRoomCard}>
             <View style={styles.emptyRow}>
-              <Text style={styles.emptyTitle}>No songs found</Text>
-              <Text style={styles.emptySubtitle}>Try searching by song, artist, requester, or price.</Text>
+              <Ionicons name="search-outline" size={32} color={premiumTheme.colors.inkMuted} />
+              <Text style={styles.emptyTitle}>Find a live room</Text>
+              <Text style={styles.emptySubtitle}>
+                Tap the search icon above to browse DJs and venues, then open a live list.
+              </Text>
+              <Pressable
+                accessibilityLabel="Browse DJs and venues"
+                accessibilityRole="button"
+                onPress={() => setIsPickerOpen(true)}
+                style={styles.pickRoomButton}
+              >
+                <Ionicons name="musical-notes-outline" size={16} color="#FFFFFF" />
+                <Text style={styles.pickRoomButtonText}>Browse DJs & venues</Text>
+              </Pressable>
             </View>
-          ) : null}
+          </SurfaceCard>
         </View>
-      </SurfaceCard>
+      ) : null}
 
       <Modal animationType="slide" transparent visible={Boolean(selectedSong)} onRequestClose={() => setSelectedSongId(null)}>
         <View style={styles.modalBackdrop}>
@@ -429,6 +596,8 @@ export default function ListScreen() {
               </View>
             </ScrollView>
 
+            {contributionError ? <Text style={styles.contributionError}>{contributionError}</Text> : null}
+
             <Pressable
               disabled={!canSubmitContribution || contributeMutation.isPending}
               onPress={handleSubmitContribution}
@@ -455,7 +624,7 @@ export default function ListScreen() {
                 <Text style={styles.modalEyebrow}>Requested by</Text>
                 <Text style={styles.modalTitle}>{selectedRequesterSong?.title}</Text>
                 <Text style={styles.modalSubtitle}>
-                  {selectedRequesterSong?.requestedBy.length ?? 0} paid rqsts
+                  {selectedRequesterSong?.contributors ?? 0} paid rqsts
                 </Text>
               </View>
               <Pressable onPress={() => setSelectedRequesterSongId(null)} style={styles.modalCloseButton}>
@@ -628,6 +797,12 @@ const styles = StyleSheet.create({
   contentInset: {
     paddingHorizontal: 20,
   },
+  contributionError: {
+    color: "#B42318",
+    fontFamily: premiumTheme.fonts.body,
+    fontSize: 13,
+    textAlign: "center",
+  },
   emptyRow: {
     alignItems: "center",
     gap: 4,
@@ -678,6 +853,25 @@ const styles = StyleSheet.create({
     fontFamily: premiumTheme.fonts.display,
     fontSize: 15,
     fontWeight: "700",
+  },
+  pickRoomButton: {
+    alignItems: "center",
+    backgroundColor: "#D94E3D",
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  pickRoomButtonText: {
+    color: "#FFFFFF",
+    fontFamily: premiumTheme.fonts.body,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  pickRoomCard: {
+    marginTop: 8,
   },
   modalBackdrop: {
     backgroundColor: "rgba(30,23,23,0.4)",

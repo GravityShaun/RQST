@@ -7,12 +7,12 @@ import {
   FeatureTile,
   HeroPanel,
   ScreenShell,
-  SearchField,
   SectionTitle,
   SurfaceCard,
   Tag,
   premiumTheme,
 } from "../../src/components/premium-ui";
+import { HomeDirectorySearch } from "../../src/features/home/HomeDirectorySearch";
 import { useMockHomeData } from "../../src/features/home/useMockHomeData";
 import { nearbyDjs, topRequestedSongs } from "../../src/features/rqst/mock-data";
 import { unsplashImages } from "../../src/lib/unsplash";
@@ -47,7 +47,7 @@ export default function HomeScreen() {
         <Tag label="Live queue" tone="mint" icon="radio-outline" />
       </View>
 
-      <SearchField label="Jump in" value="Search DJs, venues, or songs" />
+      <HomeDirectorySearch />
 
       <HeroPanel
         eyebrow="Closest live room"

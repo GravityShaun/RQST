@@ -1,18 +1,33 @@
-import { Tabs } from "expo-router";
+import { Redirect, Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { StyleSheet, View } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 
 import { premiumTheme } from "../../src/components/premium-ui";
+import { useAuthStore } from "../../src/store/auth";
 
 const tabs = [
   { name: "home", title: "Home", icon: "home-outline" as const, activeIcon: "home" as const },
   { name: "find", title: "Find", icon: "compass-outline" as const, activeIcon: "compass" as const },
   { name: "list", title: "List", icon: "list-outline" as const, activeIcon: "list" as const },
-  { name: "requests", title: "RQST", icon: "add" as const, activeIcon: "add" as const },
+  { name: "requests", title: "Request", icon: "add" as const, activeIcon: "add" as const },
   { name: "settings", title: "Settings", icon: "person-outline" as const, activeIcon: "person" as const },
 ];
 
 export default function TabsLayout() {
+  const status = useAuthStore((state) => state.status);
+
+  if (status === "loading") {
+    return (
+      <View style={styles.loadingScreen}>
+        <ActivityIndicator color={premiumTheme.colors.coral} size="large" />
+      </View>
+    );
+  }
+
+  if (status === "unauthenticated") {
+    return <Redirect href="/(auth)/login" />;
+  }
+
   return (
     <Tabs
       screenOptions={{
@@ -33,6 +48,7 @@ export default function TabsLayout() {
           key={tab.name}
           name={tab.name}
           options={{
+            sceneStyle: tab.name === "requests" ? { backgroundColor: "transparent" } : undefined,
             title: tab.title,
             tabBarLabel: tab.title,
             tabBarIcon: ({ focused }) => (
@@ -67,6 +83,12 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
+  loadingScreen: {
+    alignItems: "center",
+    backgroundColor: premiumTheme.colors.background,
+    flex: 1,
+    justifyContent: "center",
+  },
   requestTab: {
     backgroundColor: "#E05A47",
     borderColor: "rgba(255,255,255,0.24)",

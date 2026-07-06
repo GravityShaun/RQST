@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,6 +23,11 @@ from app.models import (
     UserRole,
     Venue,
 )
+
+
+@pytest.fixture(autouse=True)
+def disable_auto_complete_payments(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.services.payments.should_auto_complete_payments", lambda: False)
 
 
 @pytest.fixture()
@@ -158,6 +164,10 @@ def test_create_request_persists_payment_contribution_and_returns_metadata(
     assert body["venue_name"] == "Moonlight Room"
     assert body["original_amount_cents"] == 900
     assert body["my_contribution_cents"] == 900
+    assert body["my_original_contribution_cents"] == 900
+    assert body["my_added_contribution_cents"] == 0
+    assert body["added_amount_cents"] == 0
+    assert body["contributors"][0]["is_initial"] is True
     assert body["contributor_count"] == 1
     assert body["latest_payment_id"] is not None
     assert body["checkout_url"]
@@ -169,6 +179,61 @@ def test_create_request_persists_payment_contribution_and_returns_metadata(
     assert request.status == RequestStatus.PENDING_PAYMENT
     assert request.total_amount_cents == 0
     assert payment.gross_amount_cents == 900
+
+
+def test_create_request_persists_song_snapshot_and_returns_it_in_session_list(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    world = seed_request_world(db_session)
+    listener = world["listener"]
+    session = world["session"]
+
+    response = client.post(
+        f"/api/v1/sessions/{session.id}/requests",
+        json={
+            "amount_cents": 900,
+            "note": "Happy birthday from table seven",
+            "song": {
+                "title": "Midnight City",
+                "artist": "M83",
+                "album": "Hurry Up, We're Dreaming",
+                "duration_ms": 244000,
+                "album_art_url": "https://example.com/midnight-city.jpg",
+                "isrc": "GB55H1100002",
+                "external_source": "apple_music",
+                "external_id": "420790606",
+                "explicit": False,
+            },
+        },
+        headers=auth_headers(listener),
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["song_title"] == "Midnight City"
+    assert body["song_artist"] == "M83"
+    assert body["song_album"] == "Hurry Up, We're Dreaming"
+    assert body["song_album_art_url"] == "https://example.com/midnight-city.jpg"
+    assert body["note"] == "Happy birthday from table seven"
+
+    song = db_session.get(Song, body["song_id"])
+    request = db_session.get(SongRequest, body["id"])
+    assert song is not None
+    assert request is not None
+    assert song.external_source == "apple_music"
+    assert song.external_id == "420790606"
+    assert song.duration_ms == 244000
+    assert song.isrc == "GB55H1100002"
+    assert request.note == "Happy birthday from table seven"
+
+    list_response = client.get(f"/api/v1/sessions/{session.id}/requests")
+    assert list_response.status_code == 200
+    list_item = list_response.json()[0]
+    assert list_item["id"] == body["id"]
+    assert list_item["song_title"] == "Midnight City"
+    assert list_item["song_album_art_url"] == "https://example.com/midnight-city.jpg"
+    assert list_item["note"] == "Happy birthday from table seven"
 
 
 def test_me_requests_returns_only_current_users_requests(
@@ -267,3 +332,261 @@ def test_duplicate_song_request_returns_conflict(
     )
 
     assert duplicate_response.status_code == 409
+
+
+def test_contribute_to_open_request_updates_total_and_my_contribution(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    world = seed_request_world(db_session)
+    listener = world["listener"]
+    other_listener = world["other_listener"]
+    session = world["session"]
+    song = world["song"]
+
+    create_response = client.post(
+        f"/api/v1/sessions/{session.id}/requests",
+        json={"song_id": song.id, "amount_cents": 900},
+        headers=auth_headers(listener),
+    )
+    assert create_response.status_code == 201
+    created = create_response.json()
+
+    webhook_response = client.post(
+        "/api/v1/payments/webhooks/polar",
+        headers={"X-Polar-Signature": "polar-dev-secret"},
+        json={
+            "event_id": "evt-open-request",
+            "event_type": "payment.succeeded",
+            "data": {
+                "payment_id": created["latest_payment_id"],
+                "provider_payment_id": "provider-open",
+            },
+        },
+    )
+    assert webhook_response.status_code == 200
+
+    contribute_response = client.post(
+        f"/api/v1/requests/{created['id']}/contribute",
+        json={"amount_cents": 500},
+        headers=auth_headers(other_listener),
+    )
+    assert contribute_response.status_code == 200
+    contributed = contribute_response.json()
+
+    contribution_webhook_response = client.post(
+        "/api/v1/payments/webhooks/polar",
+        headers={"X-Polar-Signature": "polar-dev-secret"},
+        json={
+            "event_id": "evt-contribution-succeeded",
+            "event_type": "payment.succeeded",
+            "data": {
+                "payment_id": contributed["latest_payment_id"],
+                "provider_payment_id": "provider-contribution",
+            },
+        },
+    )
+    assert contribution_webhook_response.status_code == 200
+
+    refreshed_response = client.get(f"/api/v1/requests/{created['id']}")
+    assert refreshed_response.status_code == 200
+    body = refreshed_response.json()
+    assert body["total_amount_cents"] == 1400
+    assert body["contributor_count"] == 2
+
+    queue_response = client.get(f"/api/v1/sessions/{session.id}/requests")
+    assert queue_response.status_code == 200
+    queue_item = next(item for item in queue_response.json() if item["id"] == created["id"])
+    assert queue_item["total_amount_cents"] == 1400
+
+    my_requests_response = client.get("/api/v1/me/requests", headers=auth_headers(other_listener))
+    assert my_requests_response.status_code == 200
+    contributed_request = next(item for item in my_requests_response.json() if item["id"] == created["id"])
+    assert contributed_request["my_contribution_cents"] == 500
+    assert contributed_request["total_amount_cents"] == 1400
+
+
+def test_local_auto_complete_payments_open_request_on_create(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.services.payments.should_auto_complete_payments", lambda: True)
+
+    world = seed_request_world(db_session)
+    listener = world["listener"]
+    session = world["session"]
+    song = world["song"]
+
+    response = client.post(
+        f"/api/v1/sessions/{session.id}/requests",
+        json={"song_id": song.id, "amount_cents": 900},
+        headers=auth_headers(listener),
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["status"] == RequestStatus.OPEN
+    assert body["total_amount_cents"] == 900
+
+
+def test_local_auto_complete_payments_applies_contribution_immediately(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.services.payments.should_auto_complete_payments", lambda: True)
+
+    world = seed_request_world(db_session)
+    listener = world["listener"]
+    other_listener = world["other_listener"]
+    session = world["session"]
+    song = world["song"]
+
+    create_response = client.post(
+        f"/api/v1/sessions/{session.id}/requests",
+        json={"song_id": song.id, "amount_cents": 900},
+        headers=auth_headers(listener),
+    )
+    assert create_response.status_code == 201
+    created = create_response.json()
+
+    contribute_response = client.post(
+        f"/api/v1/requests/{created['id']}/contribute",
+        json={"amount_cents": 500},
+        headers=auth_headers(other_listener),
+    )
+    assert contribute_response.status_code == 200
+    body = contribute_response.json()
+    assert body["status"] == RequestStatus.OPEN
+    assert body["total_amount_cents"] == 1400
+    assert body["my_contribution_cents"] == 500
+
+
+def test_requester_added_contribution_is_logged_separately_from_original(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.services.payments.should_auto_complete_payments", lambda: True)
+
+    world = seed_request_world(db_session)
+    listener = world["listener"]
+    session = world["session"]
+    song = world["song"]
+
+    create_response = client.post(
+        f"/api/v1/sessions/{session.id}/requests",
+        json={"song_id": song.id, "amount_cents": 900},
+        headers=auth_headers(listener),
+    )
+    assert create_response.status_code == 201
+    created = create_response.json()
+
+    contribute_response = client.post(
+        f"/api/v1/requests/{created['id']}/contribute",
+        json={"amount_cents": 500},
+        headers=auth_headers(listener),
+    )
+    assert contribute_response.status_code == 200
+    body = contribute_response.json()
+    assert body["total_amount_cents"] == 1400
+    assert body["total_pool_cents"] == 1400
+    assert body["pool_original_cents"] == 900
+    assert body["added_amount_cents"] == 500
+    assert body["pool_original_cents"] + body["added_amount_cents"] == body["total_pool_cents"]
+    assert body["contributor_count"] == 1
+    assert len(body["contributors"]) == 1
+    assert body["contributors"][0]["amount_cents"] == 1400
+    assert body["contributors"][0]["is_initial"] is True
+    assert len(body["my_added_contributions"]) == 1
+    assert body["my_added_contributions"][0]["amount_cents"] == 500
+    assert body["my_added_contributions"][0]["is_initial"] is False
+
+
+def test_undo_request_within_window_cancels_pending_request(client: TestClient, db_session: Session) -> None:
+    world = seed_request_world(db_session)
+    listener = world["listener"]
+    session = world["session"]
+    song = world["song"]
+
+    create_response = client.post(
+        f"/api/v1/sessions/{session.id}/requests",
+        json={"song_id": song.id, "amount_cents": 900},
+        headers=auth_headers(listener),
+    )
+    assert create_response.status_code == 201
+    request_id = create_response.json()["id"]
+
+    undo_response = client.post(
+        f"/api/v1/requests/{request_id}/undo",
+        headers=auth_headers(listener),
+    )
+
+    assert undo_response.status_code == 200
+    request = db_session.get(SongRequest, request_id)
+    assert request is None
+
+
+def test_undo_request_after_window_expires(client: TestClient, db_session: Session) -> None:
+    world = seed_request_world(db_session)
+    listener = world["listener"]
+    session = world["session"]
+    song = world["song"]
+
+    create_response = client.post(
+        f"/api/v1/sessions/{session.id}/requests",
+        json={"song_id": song.id, "amount_cents": 900},
+        headers=auth_headers(listener),
+    )
+    assert create_response.status_code == 201
+    request_id = create_response.json()["id"]
+
+    request = db_session.get(SongRequest, request_id)
+    assert request is not None
+    request.created_at = datetime.now(UTC) - timedelta(seconds=31)
+    db_session.commit()
+
+    undo_response = client.post(
+        f"/api/v1/requests/{request_id}/undo",
+        headers=auth_headers(listener),
+    )
+
+    assert undo_response.status_code == 409
+    assert undo_response.json()["detail"] == "Undo window has expired"
+
+
+def test_undo_request_after_dj_confirm_is_rejected(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.services.payments.should_auto_complete_payments", lambda: True)
+    world = seed_request_world(db_session)
+    listener = world["listener"]
+    dj_user = world["dj_user"]
+    session = world["session"]
+    song = world["song"]
+
+    create_response = client.post(
+        f"/api/v1/sessions/{session.id}/requests",
+        json={"song_id": song.id, "amount_cents": 900},
+        headers=auth_headers(listener),
+    )
+    assert create_response.status_code == 201
+    request_id = create_response.json()["id"]
+
+    confirm_response = client.post(
+        f"/api/v1/dj/requests/{request_id}/confirm",
+        headers=auth_headers(dj_user),
+    )
+    assert confirm_response.status_code == 200
+
+    undo_response = client.post(
+        f"/api/v1/requests/{request_id}/undo",
+        headers=auth_headers(listener),
+    )
+
+    assert undo_response.status_code == 409
+    assert undo_response.json()["detail"] == "DJ already confirmed this request"

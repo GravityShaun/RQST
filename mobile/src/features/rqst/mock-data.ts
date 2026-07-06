@@ -45,6 +45,13 @@ export type RequesterContribution = UserProfile & {
   paidCents: number;
 };
 
+export type UserAddedContribution = {
+  id: string;
+  amountCents: number;
+  createdAt: string;
+  status: "pending_payment" | "succeeded" | "cancelled" | "refunded" | "disputed";
+};
+
 export type UserRequest = {
   id: string;
   title: string;
@@ -56,7 +63,12 @@ export type UserRequest = {
   requestedAmountCents: number;
   totalCents: number;
   myContributionCents: number;
-  status: "Pending" | "Open" | "Locked" | "Played" | "Canceled";
+  myOriginalContributionCents: number;
+  myAddedContributionCents: number;
+  addedToSongCents: number;
+  myAddedContributions: UserAddedContribution[];
+  isOriginalRequester: boolean;
+  status: "Pending" | "Open" | "Played" | "Canceled";
   canCancel: boolean;
 };
 
@@ -280,7 +292,7 @@ export const liveQueue: QueueItem[] = [
       contribution(userProfiles[8], 425),
       contribution(userProfiles[10], 375),
     ],
-    status: "Open",
+    status: "Pending",
     momentum: "Three people boosted this in the last 8 minutes.",
     imageUri: getSongImage("One More Time"),
     uploadedBy: userProfiles[0],
@@ -320,8 +332,8 @@ export const liveQueue: QueueItem[] = [
       contribution(userProfiles[9], 175),
       contribution(userProfiles[11], 125),
     ],
-    status: "Locked",
-    momentum: "Locked while the DJ transitions out of the current run.",
+    status: "Open",
+    momentum: "Waiting while the DJ transitions out of the current run.",
     imageUri: getSongImage("Break My Soul"),
     uploadedBy: userProfiles[2],
   },
@@ -379,7 +391,19 @@ export const initialUserRequests: UserRequest[] = [
     venue: "Moonlight Room",
     requestedAmountCents: 900,
     totalCents: 1800,
-    myContributionCents: 900,
+    myContributionCents: 1400,
+    myOriginalContributionCents: 900,
+    myAddedContributionCents: 500,
+    addedToSongCents: 900,
+    myAddedContributions: [
+      {
+        id: "add-1",
+        amountCents: 500,
+        createdAt: "2026-07-04T22:05:00-04:00",
+        status: "succeeded",
+      },
+    ],
+    isOriginalRequester: true,
     status: "Open",
     canCancel: false,
   },
@@ -393,6 +417,11 @@ export const initialUserRequests: UserRequest[] = [
     requestedAmountCents: 1200,
     totalCents: 2600,
     myContributionCents: 1200,
+    myOriginalContributionCents: 1200,
+    myAddedContributionCents: 0,
+    addedToSongCents: 1400,
+    myAddedContributions: [],
+    isOriginalRequester: true,
     status: "Played",
     canCancel: false,
   },
@@ -406,7 +435,12 @@ export const initialUserRequests: UserRequest[] = [
     requestedAmountCents: 600,
     totalCents: 1400,
     myContributionCents: 600,
-    status: "Locked",
+    myOriginalContributionCents: 600,
+    myAddedContributionCents: 0,
+    addedToSongCents: 800,
+    myAddedContributions: [],
+    isOriginalRequester: true,
+    status: "Pending",
     canCancel: false,
   },
 ];

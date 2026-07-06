@@ -47,6 +47,10 @@
     </dict>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>RQST uses your location to show nearby DJs and venues on the map.</string>
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>RQST saves profile pictures you choose from your photo library.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>RQST uses your photo library so you can upload a profile picture.</string>
     <key>NSUserActivityTypes</key>
     <array>
       <string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>

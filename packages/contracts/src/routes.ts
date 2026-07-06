@@ -4,9 +4,15 @@ export const apiRoutes = {
   login: "/api/v1/auth/login",
   refresh: "/api/v1/auth/refresh",
   me: "/api/v1/me",
+  meAvatar: "/api/v1/me/avatar",
   meRequests: "/api/v1/me/requests",
   djs: "/api/v1/djs",
+  djProfile: "/api/v1/djs/profile",
+  djEvents: "/api/v1/djs/events",
+  venues: "/api/v1/venues",
+  venuePlacesSearch: "/api/v1/venues/places/search",
   sessionsNearby: "/api/v1/sessions/nearby",
+  currentDjSession: "/api/v1/dj/sessions/current",
   songsSearch: "/api/v1/songs/search",
 } as const;
 
@@ -15,5 +21,11 @@ export const apiRouteBuilders = {
   createSessionRequest: (sessionId: number | string) => `/api/v1/sessions/${sessionId}/requests`,
   request: (requestId: number | string) => `/api/v1/requests/${requestId}`,
   contributeToRequest: (requestId: number | string) => `/api/v1/requests/${requestId}/contribute`,
+  undoRequest: (requestId: number | string) => `/api/v1/requests/${requestId}/undo`,
+  confirmRequest: (requestId: number | string) => `/api/v1/dj/requests/${requestId}/confirm`,
+  markRequestPlayed: (requestId: number | string) => `/api/v1/dj/requests/${requestId}/played`,
   currentDjRequests: "/api/v1/dj/requests/current",
+  djEvent: (eventId: number | string) => `/api/v1/djs/events/${eventId}`,
+  djEventFlyer: (eventId: number | string) => `/api/v1/djs/events/${eventId}/flyer`,
+  djEventsBySlug: (slug: string) => `/api/v1/djs/${slug}/events`,
 } as const;

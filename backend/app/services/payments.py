@@ -21,8 +21,57 @@ from app.models import (
 )
 from app.payments.polar import build_checkout_url, verify_webhook_signature
 from app.services.queue import apply_successful_contribution, cancel_contribution
+from app.realtime.queue import schedule_session_queue_broadcast
 
 settings = get_settings()
+
+
+def should_auto_complete_payments() -> bool:
+    current_settings = get_settings()
+    return current_settings.environment == "local" and current_settings.auto_complete_payments
+
+
+def complete_successful_payment(
+    db: Session,
+    *,
+    payment: Payment,
+    contribution: Contribution,
+    request: SongRequest,
+    provider_payment_id: str | None = None,
+) -> None:
+    payment.status = PaymentStatus.PAYMENT_SUCCEEDED
+    payment.provider_payment_id = provider_payment_id
+    payment.succeeded_at = datetime.now(UTC)
+    contribution.status = ContributionStatus.SUCCEEDED
+    apply_successful_contribution(
+        request,
+        amount_cents=contribution.amount_cents,
+        is_initial=request.status == RequestStatus.PENDING_PAYMENT,
+    )
+    db.add(
+        DJEarningsLedger(
+            dj_profile_id=payment.dj_profile_id,
+            session_id=payment.session_id,
+            song_request_id=payment.song_request_id,
+            payment_id=payment.id,
+            amount_cents=payment.net_amount_cents,
+            currency=payment.currency,
+            status=LedgerStatus.PENDING_CONFIRMATION,
+        )
+    )
+    schedule_session_queue_broadcast(request.session_id)
+
+
+def maybe_auto_complete_payment(
+    db: Session,
+    *,
+    payment: Payment,
+    contribution: Contribution,
+    request: SongRequest,
+) -> None:
+    if not should_auto_complete_payments():
+        return
+    complete_successful_payment(db, payment=payment, contribution=contribution, request=request)
 
 
 def calculate_fees(amount_cents: int) -> tuple[int, int, int]:
@@ -88,25 +137,13 @@ def handle_webhook(db: Session, payload: dict, signature: str | None = None) -> 
 
     match payload["event_type"]:
         case "payment.succeeded":
-            payment.status = PaymentStatus.PAYMENT_SUCCEEDED
-            payment.provider_payment_id = payload["data"].get("provider_payment_id")
-            payment.succeeded_at = datetime.now(UTC)
-            contribution.status = ContributionStatus.SUCCEEDED
-            apply_successful_contribution(
-                request,
-                amount_cents=contribution.amount_cents,
-                is_initial=request.status == RequestStatus.PENDING_PAYMENT,
+            complete_successful_payment(
+                db,
+                payment=payment,
+                contribution=contribution,
+                request=request,
+                provider_payment_id=payload["data"].get("provider_payment_id"),
             )
-            ledger = DJEarningsLedger(
-                dj_profile_id=payment.dj_profile_id,
-                session_id=payment.session_id,
-                song_request_id=payment.song_request_id,
-                payment_id=payment.id,
-                amount_cents=payment.net_amount_cents,
-                currency=payment.currency,
-                status=LedgerStatus.PENDING_CONFIRMATION,
-            )
-            db.add(ledger)
         case "payment.failed":
             payment.status = PaymentStatus.PAYMENT_FAILED
             payment.failed_at = datetime.now(UTC)
@@ -116,6 +153,7 @@ def handle_webhook(db: Session, payload: dict, signature: str | None = None) -> 
             contribution.status = ContributionStatus.REFUNDED
             if request.status == RequestStatus.OPEN:
                 cancel_contribution(request, contribution.amount_cents)
+                schedule_session_queue_broadcast(request.session_id)
         case "payment.disputed":
             payment.status = PaymentStatus.PAYMENT_DISPUTED
             contribution.status = ContributionStatus.DISPUTED

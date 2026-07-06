@@ -4,8 +4,54 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
+from sqlalchemy import delete
+from sqlalchemy.orm import Session
 
-from app.models import ContributionStatus, RequestStatus, SongRequest
+from app.models import (
+    Contribution,
+    ContributionStatus,
+    DJEarningsLedger,
+    Payment,
+    RequestStatus,
+    SongRequest,
+)
+
+INACTIVE_QUEUE_STATUSES = {
+    RequestStatus.CANCELLED,
+    RequestStatus.REJECTED,
+    RequestStatus.REFUNDED,
+    RequestStatus.EXPIRED,
+}
+
+UNDO_WINDOW_SECONDS = 30
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def assert_request_undo_allowed(request: SongRequest) -> None:
+    elapsed = (datetime.now(UTC) - _as_utc(request.created_at)).total_seconds()
+    if elapsed > UNDO_WINDOW_SECONDS:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Undo window has expired")
+
+    if request.confirmed_by_dj_at is not None or request.status == RequestStatus.CONFIRMED_BY_DJ:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="DJ already confirmed this request")
+
+    if request.status == RequestStatus.LOCKED:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="DJ already selected this request")
+
+    if request.status in {
+        RequestStatus.PLAYED,
+        RequestStatus.REJECTED,
+        RequestStatus.CANCELLED,
+        RequestStatus.REFUNDED,
+        RequestStatus.EXPIRED,
+        RequestStatus.DISPUTED,
+    }:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Request can no longer be undone")
 
 
 @dataclass(slots=True)
@@ -62,4 +108,12 @@ def mark_request_played(song_request: SongRequest) -> None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Request must be confirmed first")
     song_request.status = RequestStatus.PLAYED
     song_request.played_at = datetime.now(UTC)
+
+
+def delete_song_request(db: Session, song_request: SongRequest) -> None:
+    request_id = song_request.id
+    db.execute(delete(DJEarningsLedger).where(DJEarningsLedger.song_request_id == request_id))
+    db.execute(delete(Contribution).where(Contribution.song_request_id == request_id))
+    db.execute(delete(Payment).where(Payment.song_request_id == request_id))
+    db.delete(song_request)
 

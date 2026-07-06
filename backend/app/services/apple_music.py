@@ -62,7 +62,7 @@ def search_catalog(
         {
             "term": query,
             "types": ",".join(types),
-            "limit": max(1, min(limit, 50)),
+            "limit": max(1, min(limit, 25)),
         }
     )
     request = Request(
@@ -77,7 +77,7 @@ def search_catalog(
         with urlopen(request, timeout=4) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
-        if exc.code in {401, 403}:
+        if exc.code in {400, 401, 403}:
             return _search_itunes_catalog(query, limit=limit, include_artists=include_artists)
         raise AppleMusicError("Apple Music search is unavailable") from exc
     except (URLError, TimeoutError, json.JSONDecodeError) as exc:
@@ -107,7 +107,34 @@ def _search_itunes_catalog(
     limit: int,
     include_artists: bool,
 ) -> AppleMusicSearchResults:
-    entity = "musicTrack,musicArtist" if include_artists else "musicTrack"
+    songs_payload = _search_itunes_entity(query, entity="musicTrack", limit=limit)
+    artist_payload = (
+        _search_itunes_entity(query, entity="musicArtist", limit=limit) if include_artists else []
+    )
+
+    songs = [
+        _normalize_itunes_song(result, score=limit - index)
+        for index, result in enumerate(songs_payload)
+        if isinstance(result, dict) and result.get("wrapperType") == "track" and result.get("trackId")
+    ]
+
+    artists: list[AppleMusicArtist] = []
+    artist_ids: set[str] = set()
+    for index, result in enumerate(artist_payload):
+        if not isinstance(result, dict):
+            continue
+        if result.get("wrapperType") != "artist" or not result.get("artistId"):
+            continue
+        artist_id = str(result["artistId"])
+        if artist_id in artist_ids:
+            continue
+        artist_ids.add(artist_id)
+        artists.append(_normalize_itunes_artist(result, score=limit - index))
+
+    return AppleMusicSearchResults(songs=songs, artists=artists)
+
+
+def _search_itunes_entity(query: str, *, entity: str, limit: int) -> list[dict]:
     params = urlencode(
         {
             "term": query,
@@ -132,23 +159,9 @@ def _search_itunes_catalog(
 
     results = payload.get("results") if isinstance(payload, dict) else []
     if not isinstance(results, list):
-        results = []
+        return []
 
-    songs: list[AppleMusicSong] = []
-    artists: list[AppleMusicArtist] = []
-    artist_ids: set[str] = set()
-    for index, result in enumerate(results):
-        if not isinstance(result, dict):
-            continue
-        if result.get("wrapperType") == "track" and result.get("trackId"):
-            songs.append(_normalize_itunes_song(result, score=limit - index))
-        elif include_artists and result.get("wrapperType") == "artist" and result.get("artistId"):
-            artist_id = str(result["artistId"])
-            if artist_id not in artist_ids:
-                artist_ids.add(artist_id)
-                artists.append(_normalize_itunes_artist(result, score=limit - index))
-
-    return AppleMusicSearchResults(songs=songs, artists=artists)
+    return [result for result in results if isinstance(result, dict)]
 
 
 def _normalize_itunes_song(song: dict, *, score: int) -> AppleMusicSong:

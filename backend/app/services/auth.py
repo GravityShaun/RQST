@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.security import create_token_pair, decode_token, hash_password, hash_token, verify_password
 from app.models import RefreshToken, User, UserRole
 from app.schemas.auth import LoginRequest, RegisterRequest
+from app.services.dj_profiles import ensure_dj_profile_for_user
 
 
 def register_user(db: Session, payload: RegisterRequest) -> User:
@@ -24,6 +25,7 @@ def register_user(db: Session, payload: RegisterRequest) -> User:
     )
     db.add(user)
     db.flush()
+    ensure_dj_profile_for_user(db, user)
     return user
 
 

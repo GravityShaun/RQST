@@ -6,10 +6,23 @@ from app.models.enums import ContributionStatus, RequestStatus
 from app.schemas.common import APIModel
 
 
+class RequestSongCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    artist: str = Field(min_length=1, max_length=255)
+    album: str | None = Field(default=None, max_length=255)
+    duration_ms: int | None = Field(default=None, ge=1)
+    album_art_url: str | None = Field(default=None, max_length=500)
+    isrc: str | None = Field(default=None, max_length=32)
+    external_source: str | None = Field(default=None, max_length=64)
+    external_id: str | None = Field(default=None, max_length=128)
+    explicit: bool = False
+
+
 class RequestCreate(BaseModel):
-    song_id: int
+    song_id: int | None = None
     amount_cents: int = Field(ge=100)
     note: str | None = Field(default=None, max_length=240)
+    song: RequestSongCreate | None = None
 
 
 class ContributionCreate(BaseModel):
@@ -23,6 +36,7 @@ class RequestContributorRead(APIModel):
     avatar_url: str | None = None
     amount_cents: int
     currency: str
+    is_initial: bool = False
     status: ContributionStatus
     created_at: datetime
 
@@ -56,6 +70,12 @@ class RequestRead(APIModel):
     requester_display_name: str | None = None
     requester_avatar_url: str | None = None
     my_contribution_cents: int = 0
+    my_original_contribution_cents: int = 0
+    my_added_contribution_cents: int = 0
+    total_pool_cents: int = 0
+    pool_original_cents: int = 0
+    added_amount_cents: int = 0
+    my_added_contributions: list[RequestContributorRead] = Field(default_factory=list)
     contributor_count: int = 0
     latest_payment_id: int | None = None
     latest_payment_status: str | None = None

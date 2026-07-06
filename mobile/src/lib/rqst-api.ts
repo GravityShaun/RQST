@@ -1,61 +1,119 @@
 import { Platform } from "react-native";
 import type { SongRequestSummary } from "@rqst/contracts";
 
-const localApiHost = Platform.OS === "android" ? "10.0.2.2" : "127.0.0.1";
+import { refreshAuthTokens } from "./auth-api";
+import { apiBaseUrl } from "./api-config";
+import { toCamelCase } from "./json";
+import { getAccessToken, getRefreshToken, useAuthStore } from "../store/auth";
 
-export const apiBaseUrl = (process.env.EXPO_PUBLIC_RQST_API_URL ?? `http://${localApiHost}:8000/api/v1`).replace(/\/$/, "");
-const accessToken = process.env.EXPO_PUBLIC_RQST_ACCESS_TOKEN;
-export const hasApiAccessToken = Boolean(accessToken);
+export { apiBaseUrl };
 
 type ApiOptions = RequestInit & {
   auth?: boolean;
+  retry?: boolean;
 };
 
-function toCamelCase(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(toCamelCase);
+let refreshPromise: Promise<boolean> | null = null;
+
+async function refreshSessionTokens(): Promise<boolean> {
+  if (refreshPromise) {
+    return refreshPromise;
   }
 
-  if (!value || typeof value !== "object") {
-    return value;
-  }
+  refreshPromise = (async () => {
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) {
+      await useAuthStore.getState().signOut();
+      return false;
+    }
 
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [
-      key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()),
-      toCamelCase(item),
-    ]),
-  );
+    try {
+      const tokens = await refreshAuthTokens(refreshToken);
+      await useAuthStore.getState().applyTokens(tokens);
+      return true;
+    } catch {
+      await useAuthStore.getState().signOut();
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
+export function hasApiAccessToken(): boolean {
+  return Boolean(getAccessToken());
 }
 
 export async function rqstApi<T>(path: string, options: ApiOptions = {}): Promise<T> {
-  const headers = new Headers(options.headers);
-  headers.set("Accept", "application/json");
+  const shouldAuth = options.auth !== false;
+  const canRetry = options.retry !== false;
 
-  if (options.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
+  async function request(accessToken: string | null): Promise<Response> {
+    const headers = new Headers(options.headers);
+    headers.set("Accept", "application/json");
+
+    if (options.body && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+
+    if (shouldAuth && accessToken) {
+      headers.set("Authorization", `Bearer ${accessToken}`);
+    }
+
+    return fetch(`${apiBaseUrl}${path}`, {
+      ...options,
+      headers,
+    });
   }
 
-  if (options.auth !== false && accessToken) {
-    headers.set("Authorization", `Bearer ${accessToken}`);
-  }
+  let response = await request(getAccessToken());
 
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    ...options,
-    headers,
-  });
+  if (response.status === 401 && shouldAuth && canRetry && getRefreshToken()) {
+    const refreshed = await refreshSessionTokens();
+    if (refreshed) {
+      response = await request(getAccessToken());
+    }
+  }
 
   if (!response.ok) {
-    throw new Error(`RQST API request failed with ${response.status}`);
+    let message = `RQST API request failed with ${response.status}`;
+
+    try {
+      const body = (await response.json()) as { detail?: string };
+      if (typeof body.detail === "string") {
+        message = body.detail;
+      }
+    } catch {
+      // Keep default message when response body is not JSON.
+    }
+
+    throw new Error(message);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return toCamelCase(await response.json()) as T;
 }
 
 export type RequestCreatePayload = {
-  song_id: number;
+  song_id?: number;
   amount_cents: number;
   note?: string | null;
+  song?: {
+    title: string;
+    artist: string;
+    album?: string | null;
+    duration_ms?: number | null;
+    album_art_url?: string | null;
+    isrc?: string | null;
+    external_source?: string | null;
+    external_id?: string | null;
+    explicit?: boolean;
+  };
 };
 
 export type ContributionCreatePayload = {

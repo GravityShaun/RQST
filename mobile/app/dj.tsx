@@ -1,4 +1,6 @@
-import { Link } from "expo-router";
+import { useMemo } from "react";
+import { Link, useLocalSearchParams } from "expo-router";
+import { useQuery } from "@tanstack/react-query";
 import { Image, ImageBackground, Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
@@ -12,95 +14,123 @@ import {
   Tag,
   premiumTheme,
 } from "../src/components/premium-ui";
-import { djProfile } from "../src/features/rqst/mock-data";
+import { fetchDjProfileBySlug } from "../src/lib/discover-api";
+import { getDjImage } from "../src/lib/unsplash";
 
 export default function DjProfileScreen() {
+  const params = useLocalSearchParams<{ slug?: string | string[] }>();
+  const slugParam = params.slug;
+  const slug = Array.isArray(slugParam) ? slugParam[0] : slugParam;
+
+  const profileQuery = useQuery({
+    queryKey: ["djProfile", slug],
+    queryFn: () => fetchDjProfileBySlug(slug as string),
+    enabled: Boolean(slug),
+  });
+
+  const profile = profileQuery.data;
+  const imageUri = getDjImage(profile?.artistName ?? "DJ");
+  const genres = profile?.genresJson ?? [];
+  const subtitle = useMemo(() => {
+    if (!profile) {
+      return "Loading DJ profile...";
+    }
+
+    const parts = [profile.city, profile.isLive ? `Live at ${profile.venueName ?? "a venue"}` : null].filter(Boolean);
+    return parts.length ? parts.join(" · ") : "Public DJ profile on RQST";
+  }, [profile]);
+
   return (
     <ScreenShell>
-      <Link href="/(tabs)/list" asChild>
+      <Link href="/(tabs)/home" asChild>
         <Pressable style={styles.backButton}>
-          <Text style={styles.backButtonText}>Back to queue</Text>
+          <Text style={styles.backButtonText}>Back</Text>
         </Pressable>
       </Link>
 
       <ScreenHeader
         eyebrow="DJ profile"
-        title={djProfile.name}
-        subtitle="A marketing-friendly profile page that helps fans follow the DJ, learn the vibe, and find upcoming sets."
-        trailing={<Tag label="Verified DJ" tone="mint" icon="checkmark-circle-outline" />}
+        title={profile?.artistName ?? "DJ profile"}
+        subtitle={subtitle}
+        trailing={
+          profile?.isLive ? (
+            <Tag label="Live now" tone="mint" icon="radio-outline" />
+          ) : (
+            <Tag label="Verified DJ" tone="mint" icon="checkmark-circle-outline" />
+          )
+        }
       />
 
-      <SurfaceCard style={styles.heroCard}>
-        <ImageBackground source={{ uri: djProfile.imageUri }} imageStyle={styles.heroImage} style={styles.heroImageWrap}>
-          <View style={styles.heroOverlay} />
-        </ImageBackground>
-        <View style={styles.profileTopRow}>
-          <Image source={{ uri: djProfile.imageUri }} style={styles.avatar} />
-          <View style={styles.profileCopy}>
-            <Text style={styles.handle}>{djProfile.handle}</Text>
-            <Text style={styles.bio}>{djProfile.bio}</Text>
+      {profileQuery.isLoading ? (
+        <SurfaceCard>
+          <Text style={styles.loadingText}>Loading profile...</Text>
+        </SurfaceCard>
+      ) : profileQuery.isError || !profile ? (
+        <SurfaceCard>
+          <Text style={styles.loadingText}>Could not load this DJ profile.</Text>
+        </SurfaceCard>
+      ) : (
+        <>
+          <SurfaceCard style={styles.heroCard}>
+            <ImageBackground source={{ uri: imageUri }} imageStyle={styles.heroImage} style={styles.heroImageWrap}>
+              <View style={styles.heroOverlay} />
+            </ImageBackground>
+            <View style={styles.profileTopRow}>
+              <Image source={{ uri: imageUri }} style={styles.avatar} />
+              <View style={styles.profileCopy}>
+                <Text style={styles.handle}>@{profile.slug}</Text>
+                <Text style={styles.bio}>{profile.bio ?? "This DJ is on RQST."}</Text>
+              </View>
+            </View>
+
+            <View style={styles.pillRow}>
+              {genres.length ? (
+                genres.map((genre, index) => (
+                  <Tag key={genre} label={genre} tone={index === 0 ? "gold" : index === 1 ? "mint" : "slate"} />
+                ))
+              ) : (
+                <Tag label="Open format" tone="slate" />
+              )}
+            </View>
+          </SurfaceCard>
+
+          <View style={styles.metricRow}>
+            <FeatureTile
+              icon="location-outline"
+              title="Based in"
+              subtitle="Where this DJ usually plays."
+              value={profile.city ?? "RQST"}
+              tone="gold"
+            />
+            <FeatureTile
+              icon="radio-outline"
+              title="Status"
+              subtitle="Whether this DJ is live right now."
+              value={profile.isLive ? "Live" : "Playing soon"}
+              tone="mint"
+            />
           </View>
-        </View>
 
-        <View style={styles.pillRow}>
-          {djProfile.genres.map((genre, index) => (
-            <Tag key={genre} label={genre} tone={index === 0 ? "gold" : index === 1 ? "mint" : "slate"} />
-          ))}
-        </View>
-      </SurfaceCard>
-
-      <View style={styles.metricRow}>
-        <FeatureTile
-          icon="people-outline"
-          title="Followers"
-          subtitle="Growing audience across the app."
-          value={djProfile.followers}
-          tone="gold"
-        />
-        <FeatureTile
-          icon="checkmark-done-outline"
-          title="Acceptance rate"
-          subtitle="How often this DJ confirms a song."
-          value={djProfile.acceptanceRate}
-          tone="mint"
-        />
-      </View>
-
-      <SectionTitle title="Tonight" subtitle="The stats and links that make the page useful during a live set." />
-      <SurfaceCard>
-        <View style={styles.pillRow}>
-          <StatPill label="Earned tonight" value={djProfile.totalEarnedTonight} tone="coral" />
-          <StatPill label="Profile status" value="Live" tone="slate" />
-        </View>
-        <ActionRow
-          icon="share-social-outline"
-          title="Share profile"
-          subtitle="Send this DJ page to friends before they arrive at the venue."
-          value="Link"
-          tone="mint"
-        />
-        <ActionRow
-          icon="logo-instagram"
-          title="Social links"
-          subtitle={djProfile.socials.join(" · ")}
-          value="Open"
-          tone="gold"
-        />
-      </SurfaceCard>
-
-      <SectionTitle title="Upcoming events" subtitle="A clean, shareable event list built into the profile." />
-      <SurfaceCard>
-        {djProfile.events.map((event) => (
-          <ActionRow
-            key={event.title}
-            icon="calendar-outline"
-            title={event.title}
-            subtitle={event.subtitle}
-            value={event.value}
-            tone="slate"
-          />
-        ))}
-      </SurfaceCard>
+          <SectionTitle title="Tonight" subtitle="Quick links for fans following this DJ." />
+          <SurfaceCard>
+            <View style={styles.pillRow}>
+              <StatPill
+                label="Venue"
+                value={profile.isLive ? (profile.venueName ?? "Live room") : "Coming up"}
+                tone="coral"
+              />
+              <StatPill label="Profile" value="Public" tone="slate" />
+            </View>
+            <ActionRow
+              icon="share-social-outline"
+              title="Share profile"
+              subtitle={`Send rqst.app/djs/${profile.slug} to friends before they arrive.`}
+              value="Link"
+              tone="mint"
+            />
+          </SurfaceCard>
+        </>
+      )}
     </ScreenShell>
   );
 }
@@ -149,6 +179,12 @@ const styles = StyleSheet.create({
   heroOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(217, 94, 79, 0.18)",
+  },
+  loadingText: {
+    color: premiumTheme.colors.inkMuted,
+    fontFamily: premiumTheme.fonts.body,
+    fontSize: 15,
+    lineHeight: 22,
   },
   metricRow: {
     flexDirection: "row",

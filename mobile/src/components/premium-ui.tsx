@@ -1,6 +1,7 @@
-import type { ComponentProps, PropsWithChildren, ReactNode } from "react";
-import type { StyleProp, ViewStyle } from "react-native";
-import { ImageBackground, Platform, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
+import type { ComponentProps, PropsWithChildren, ReactNode, RefObject } from "react";
+import type { ScrollViewProps, StyleProp, ViewStyle } from "react-native";
+import { ImageBackground, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { formatUsd } from "@rqst/shared-config";
@@ -126,18 +127,33 @@ function BackgroundTexture() {
 export function ScreenShell({
   children,
   contentContainerStyle,
-}: PropsWithChildren<{ contentContainerStyle?: StyleProp<ViewStyle> }>) {
+  edgeToEdgeTop = false,
+  refreshControl,
+  scrollRef,
+}: PropsWithChildren<{
+  contentContainerStyle?: StyleProp<ViewStyle>;
+  edgeToEdgeTop?: boolean;
+  refreshControl?: ScrollViewProps["refreshControl"];
+  scrollRef?: RefObject<ScrollView | null>;
+}>) {
+  const insets = useSafeAreaInsets();
+
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView
+      edges={edgeToEdgeTop ? ["left", "right", "bottom"] : undefined}
+      style={[styles.screen, edgeToEdgeTop && styles.screenEdgeToEdgeTop]}
+    >
       <StatusBar barStyle="dark-content" />
-      <BackgroundTexture />
+      {edgeToEdgeTop ? null : <BackgroundTexture />}
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
-          styles.scrollContentTop,
+          edgeToEdgeTop ? { paddingTop: insets.top + 12 } : styles.scrollContentTop,
           contentContainerStyle,
         ]}
+        refreshControl={refreshControl}
         showsVerticalScrollIndicator={false}
       >
         {children}
@@ -1102,6 +1118,9 @@ const styles = StyleSheet.create({
   screen: {
     backgroundColor: premiumTheme.colors.background,
     flex: 1,
+  },
+  screenEdgeToEdgeTop: {
+    backgroundColor: "transparent",
   },
   scroll: {
     flex: 1,

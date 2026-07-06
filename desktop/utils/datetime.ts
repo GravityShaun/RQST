@@ -1,0 +1,82 @@
+const TIMEZONE_SUFFIX_PATTERN = /(?:[zZ]|[+-]\d{2}:\d{2})$/;
+
+export function parseApiDateTime(value: string): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  const normalized = TIMEZONE_SUFFIX_PATTERN.test(trimmed) ? trimmed : `${trimmed}Z`;
+  const date = new Date(normalized);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function toDateTimeLocalValue(value: string | Date | null | undefined): string {
+  const date = value instanceof Date ? value : parseApiDateTime(value ?? "");
+  if (!date) {
+    return "";
+  }
+
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+  ].join("-") + `T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+export function fromDateTimeLocalValue(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const date = new Date(trimmed);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+export function formatEventDateTime(value: string): string {
+  const date = parseApiDateTime(value);
+  if (!date) {
+    return "Unknown date";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+export function formatTimeAgo(value: string, nowMs = Date.now()): string {
+  const date = parseApiDateTime(value);
+  if (!date) {
+    return "Unknown";
+  }
+
+  const seconds = Math.floor((nowMs - date.getTime()) / 1000);
+  if (seconds < 60) {
+    return "1 min ago";
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes} min ago`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return hours === 1 ? "1 hr ago" : `${hours} hr ago`;
+  }
+
+  const days = Math.floor(hours / 24);
+  if (days < 7) {
+    return days === 1 ? "1 day ago" : `${days} days ago`;
+  }
+
+  const weeks = Math.floor(days / 7);
+  return weeks === 1 ? "1 week ago" : `${weeks} weeks ago`;
+}

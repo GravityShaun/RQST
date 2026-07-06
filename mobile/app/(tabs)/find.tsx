@@ -19,14 +19,15 @@ import {
 import MapView, { Marker, PROVIDER_GOOGLE, type MapStyleElement, type Region } from "react-native-maps";
 
 import {
-  SearchField,
   SectionTitle,
   StatPill,
   Tag,
   VenueCard,
   premiumTheme,
 } from "../../src/components/premium-ui";
+import { DirectorySearch } from "../../src/features/discover/DirectorySearch";
 import { nearbyVenues } from "../../src/features/rqst/mock-data";
+import type { DiscoverVenue } from "../../src/lib/discover-api";
 
 const drawerTone = {
   gold: premiumTheme.colors.gold,
@@ -201,6 +202,29 @@ export default function FindScreen() {
     );
   }
 
+  function handleDiscoverVenuePress(venue: DiscoverVenue) {
+    setSelectedVenueTitle(venue.name);
+
+    if (venue.latitude != null && venue.longitude != null) {
+      mapRef.current?.animateToRegion(
+        regionFromCoordinates(venue.latitude, venue.longitude),
+        MAP_ANIMATION_MS,
+      );
+      return;
+    }
+
+    const matchedVenue = nearbyVenues.find(
+      (item) => item.title.toLowerCase() === venue.name.toLowerCase(),
+    );
+
+    if (matchedVenue) {
+      mapRef.current?.animateToRegion(
+        regionFromCoordinates(matchedVenue.latitude, matchedVenue.longitude),
+        MAP_ANIMATION_MS,
+      );
+    }
+  }
+
   async function handleLocatePress() {
     setIsLocating(true);
 
@@ -319,18 +343,19 @@ export default function FindScreen() {
         )}
 
         <View style={styles.topOverlay}>
-          <View style={styles.searchLocationRow}>
-            <View style={styles.searchFieldWrap}>
-              <SearchField label="Search nearby" value="Venues, artists, or neighborhoods" />
-            </View>
-            <Pressable onPress={handleLocatePress} style={styles.circleButton}>
-              <Ionicons
-                color={premiumTheme.colors.ink}
-                name={isLocating ? "sync-outline" : "locate-outline"}
-                size={20}
-              />
-            </Pressable>
-          </View>
+          <DirectorySearch
+            onVenuePress={handleDiscoverVenuePress}
+            trailingAction={
+              <Pressable onPress={handleLocatePress} style={styles.circleButton}>
+                <Ionicons
+                  color={premiumTheme.colors.ink}
+                  name={isLocating ? "sync-outline" : "locate-outline"}
+                  size={20}
+                />
+              </Pressable>
+            }
+            variant="overlay"
+          />
         </View>
 
         <Animated.View
@@ -550,19 +575,12 @@ const styles = StyleSheet.create({
     backgroundColor: premiumTheme.colors.background,
     flex: 1,
   },
-  searchFieldWrap: {
-    flex: 1,
-  },
-  searchLocationRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-  },
   topOverlay: {
     left: 20,
     position: "absolute",
     right: 20,
     top: 12,
+    zIndex: 2,
   },
   venueWrap: {
     borderRadius: premiumTheme.radii.lg,

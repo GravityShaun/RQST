@@ -5,96 +5,187 @@
         <div class="muted">Active queue</div>
         <h1 style="margin: 0; font-size: 2.6rem">Ranked by live dollars</h1>
         <p v-if="pending" class="muted" style="margin: 8px 0 0">Loading live requests...</p>
-        <p v-else-if="error" class="muted" style="margin: 8px 0 0">Showing local queue until the backend is reachable.</p>
+        <p v-else-if="error" class="muted" style="margin: 8px 0 0">Could not reach the backend. Retrying every 30 seconds.</p>
+        <p v-else-if="sessionId" class="muted" style="margin: 8px 0 0">Session #{{ sessionId }} · updates in real time</p>
       </div>
       <div style="text-align: right">
         <div class="metric">{{ totalRequested }}</div>
         <div class="muted">Requested tonight</div>
       </div>
     </section>
-    <QueueTable :items="queueItems" />
+
+    <div class="segment-tabs">
+      <button
+        v-for="tab in requestTabs"
+        :key="tab.id"
+        class="segment-tab"
+        :class="{ 'is-selected': activeTab === tab.id }"
+        type="button"
+        @click="activeTab = tab.id"
+      >
+        {{ tab.label }}
+      </button>
+    </div>
+
+    <QueueTable
+      :items="visibleItems"
+      :show-play-button="activeTab === 'queued'"
+      @play="openPlayModal"
+    />
+
+    <Teleport to="body">
+      <div v-if="playTarget" class="modal-backdrop" @click.self="closePlayModal">
+        <div class="modal-card" role="dialog" aria-labelledby="play-modal-title" aria-modal="true">
+          <div class="eyebrow">Confirm song play</div>
+          <h2 id="play-modal-title" style="margin: 0; font-size: 1.8rem">{{ playTarget.title }}</h2>
+          <p class="muted" style="margin: 0">{{ playTarget.artist }}</p>
+          <div class="play-amount-pill">{{ playTarget.total }}</div>
+          <p class="muted" style="margin: 0">Mark this request as played for the room.</p>
+          <p v-if="playError" class="play-error">{{ playError }}</p>
+          <div class="btn-row" style="margin-top: 4px">
+            <button class="btn btn-secondary" type="button" :disabled="isPlaying" @click="closePlayModal">Cancel</button>
+            <button class="btn btn-primary" type="button" :disabled="isPlaying" @click="confirmPlay">
+              {{ isPlaying ? "Playing..." : "Confirm play" }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import QueueTable from "~/components/QueueTable.vue";
-import { useDashboardData } from "~/composables/useDashboardData";
+import { useSessionQueue } from "~/composables/useSessionQueue";
+import { countUniqueContributors } from "~/utils/contributors";
+import { formatTimeAgo, parseApiDateTime } from "~/utils/datetime";
 
-type ApiRequest = {
-  id: number;
-  status: string;
-  original_amount_cents: number;
-  total_amount_cents: number;
-  created_at: string;
-  song_title?: string | null;
-  song_artist?: string | null;
-  contributor_count?: number | null;
-};
+type RequestTab = "queued" | "played";
 
 type QueueRow = {
+  id: number;
   rank: number;
   title: string;
   artist: string;
   total: string;
+  amountCents: number;
   contributors: number;
-  status: string;
+  rawStatus: string;
   requestedAt?: string;
 };
 
-const fallbackData = useDashboardData();
-const config = useRuntimeConfig();
-const sessionId = 1;
-const requestUrl = `${config.public.apiBaseUrl}/sessions/${sessionId}/requests`;
-const { data: backendRequests, pending, error } = await useFetch<ApiRequest[]>(requestUrl, {
-  default: () => [],
+const requestTabs = [
+  { id: "queued" as const, label: "Queued" },
+  { id: "played" as const, label: "Played" },
+];
+
+const activeTab = ref<RequestTab>("queued");
+const playTarget = ref<QueueRow | null>(null);
+const playError = ref("");
+const isPlaying = ref(false);
+const now = ref(Date.now());
+
+let timeAgoInterval: ReturnType<typeof setInterval> | undefined;
+
+onMounted(() => {
+  timeAgoInterval = setInterval(() => {
+    now.value = Date.now();
+  }, 60_000);
 });
+
+onUnmounted(() => {
+  if (timeAgoInterval) {
+    clearInterval(timeAgoInterval);
+  }
+});
+
+const { requests: backendRequests, pending, error, sessionId, markRequestPlayed } = useSessionQueue();
 
 function formatUsd(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 }
 
-function formatStatus(status: string) {
-  return status
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function formatRequestedAt(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
 const liveRows = computed<QueueRow[]>(() =>
-  [...(backendRequests.value ?? [])]
+  [...backendRequests.value]
     .sort((left, right) => {
       const amountSort = right.total_amount_cents - left.total_amount_cents;
-      return amountSort === 0 ? new Date(left.created_at).getTime() - new Date(right.created_at).getTime() : amountSort;
+      if (amountSort !== 0) {
+        return amountSort;
+      }
+
+      const leftCreatedAt = parseApiDateTime(left.created_at)?.getTime() ?? 0;
+      const rightCreatedAt = parseApiDateTime(right.created_at)?.getTime() ?? 0;
+      return leftCreatedAt - rightCreatedAt;
     })
     .map((item, index) => ({
+      id: item.id,
       rank: index + 1,
       title: item.song_title ?? `Request #${item.id}`,
       artist: item.song_artist ?? "Unknown artist",
       total: formatUsd(item.total_amount_cents || item.original_amount_cents),
-      contributors: item.contributor_count ?? 0,
-      status: formatStatus(item.status),
-      requestedAt: formatRequestedAt(item.created_at),
+      amountCents: item.total_amount_cents || item.original_amount_cents,
+      contributors: countUniqueContributors(item.contributor_count, item.contributors),
+      rawStatus: item.status,
+      requestedAt: formatTimeAgo(item.created_at, now.value),
     })),
 );
-const queueItems = computed(() => (liveRows.value.length ? liveRows.value : fallbackData.queue));
-const totalRequested = computed(() => {
-  if (!liveRows.value.length) {
-    return "$286";
+
+const queuedItems = computed(() =>
+  liveRows.value.filter((item) => item.rawStatus !== "played").map((item, index) => ({ ...item, rank: index + 1 })),
+);
+const playedItems = computed(() =>
+  liveRows.value.filter((item) => item.rawStatus === "played").map((item, index) => ({ ...item, rank: index + 1 })),
+);
+
+const visibleItems = computed(() => {
+  if (error.value) {
+    return [];
   }
 
-  const cents = (backendRequests.value ?? []).reduce(
+  return activeTab.value === "queued" ? queuedItems.value : playedItems.value;
+});
+
+const totalRequested = computed(() => {
+  if (error.value || backendRequests.value.length === 0) {
+    return formatUsd(0);
+  }
+
+  const cents = backendRequests.value.reduce(
     (total, request) => total + (request.total_amount_cents || request.original_amount_cents),
     0,
   );
   return formatUsd(cents);
 });
+
+function openPlayModal(item: QueueRow) {
+  playError.value = "";
+  playTarget.value = item;
+}
+
+function closePlayModal() {
+  if (isPlaying.value) {
+    return;
+  }
+
+  playTarget.value = null;
+  playError.value = "";
+}
+
+async function confirmPlay() {
+  if (!playTarget.value || isPlaying.value) {
+    return;
+  }
+
+  isPlaying.value = true;
+  playError.value = "";
+
+  try {
+    await markRequestPlayed(playTarget.value.id, playTarget.value.rawStatus);
+    playTarget.value = null;
+  } catch {
+    playError.value = "Could not mark this song as played. Confirm the backend is running and try again.";
+  } finally {
+    isPlaying.value = false;
+  }
+}
 </script>
