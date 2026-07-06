@@ -26,6 +26,7 @@ Backend/.secrets/
 backend/.env
 backend/.env.*
 backend/.secrets/
+backend/uploads/
 AuthKey_*.p8
 *.p8
 Mobile/.env

@@ -1,11 +1,29 @@
 import { create } from "zustand";
+import type { QueueItem } from "../features/rqst/mock-data";
+
+export type SelectedSession = {
+  sessionId: number;
+  djName: string;
+  venueName: string;
+  slug: string;
+};
 
 type AppState = {
-  selectedSessionId: number | null;
-  setSelectedSessionId: (sessionId: number | null) => void;
+  localQueueRequests: QueueItem[];
+  addLocalQueueRequest: (request: QueueItem) => void;
+  selectedSession: SelectedSession | null;
+  setSelectedSession: (session: SelectedSession | null) => void;
 };
 
 export const useAppStore = create<AppState>((set) => ({
-  selectedSessionId: null,
-  setSelectedSessionId: (selectedSessionId) => set({ selectedSessionId }),
+  localQueueRequests: [],
+  addLocalQueueRequest: (request) =>
+    set((state) => ({
+      localQueueRequests: [
+        request,
+        ...state.localQueueRequests.filter((queueRequest) => queueRequest.id !== request.id),
+      ],
+    })),
+  selectedSession: null,
+  setSelectedSession: (selectedSession) => set({ selectedSession }),
 }));

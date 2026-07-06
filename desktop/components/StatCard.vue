@@ -1,6 +1,6 @@
 <template>
-  <section class="card">
-    <div class="muted">{{ label }}</div>
+  <section class="stat-card" :class="tone ? `tone-${tone}` : undefined">
+    <div class="eyebrow">{{ label }}</div>
     <div class="metric">{{ value }}</div>
     <div v-if="hint" class="muted">{{ hint }}</div>
   </section>
@@ -11,6 +11,6 @@ defineProps<{
   label: string;
   value: string;
   hint?: string;
+  tone?: "gold" | "mint" | "coral" | "slate" | "blue";
 }>();
 </script>
-

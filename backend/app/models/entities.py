@@ -95,6 +95,7 @@ class Event(Base, TimestampMixin):
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ticket_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    flyer_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
 class DJSession(Base, TimestampMixin):
@@ -193,6 +194,7 @@ class Contribution(Base, TimestampMixin):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     amount_cents: Mapped[int] = mapped_column(Integer)
     currency: Mapped[str] = mapped_column(String(3), default="USD")
+    is_initial: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[ContributionStatus] = mapped_column(
         String(32), default=ContributionStatus.PENDING_PAYMENT
     )

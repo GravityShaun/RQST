@@ -7,11 +7,13 @@ from app.models import (
     DJProfile,
     DJSession,
     Payment,
+    RequestStatus,
     Song,
     SongRequest,
     User,
     Venue,
 )
+from app.services.queue import INACTIVE_QUEUE_STATUSES
 from app.schemas.requests import RequestContributorRead, RequestRead
 
 VISIBLE_CONTRIBUTION_STATUSES = {
@@ -19,11 +21,109 @@ VISIBLE_CONTRIBUTION_STATUSES = {
     ContributionStatus.SUCCEEDED,
 }
 
+ACCOUNTED_CONTRIBUTION_STATUSES = {
+    ContributionStatus.SUCCEEDED,
+}
+
+
+def _aggregate_contributors_per_user(
+    contributions: list[Contribution],
+    users_by_id: dict[int, User],
+) -> list[RequestContributorRead]:
+    grouped: dict[int, list[Contribution]] = {}
+    for item in contributions:
+        grouped.setdefault(item.user_id, []).append(item)
+
+    aggregated: list[RequestContributorRead] = []
+    for user_id, user_contributions in grouped.items():
+        user_contributions.sort(key=lambda item: (item.created_at, item.id))
+        earliest = user_contributions[0]
+        user = users_by_id.get(user_id)
+        aggregated.append(
+            RequestContributorRead(
+                id=earliest.id,
+                user_id=user_id,
+                display_name=user.display_name if user else "RQST listener",
+                avatar_url=user.avatar_url if user else None,
+                amount_cents=sum(item.amount_cents for item in user_contributions),
+                currency=earliest.currency,
+                is_initial=any(item.is_initial for item in user_contributions),
+                status=(
+                    ContributionStatus.PENDING_PAYMENT
+                    if any(item.status == ContributionStatus.PENDING_PAYMENT for item in user_contributions)
+                    else ContributionStatus.SUCCEEDED
+                ),
+                created_at=earliest.created_at,
+            )
+        )
+
+    aggregated.sort(key=lambda item: (item.created_at, item.id))
+    return aggregated
+
+
+def _compute_contribution_amounts(
+    contributions: list[Contribution],
+    *,
+    current_user_id: int | None,
+    requested_by_user_id: int,
+) -> dict[str, int]:
+    visible_contributions = [
+        item for item in contributions if item.status in VISIBLE_CONTRIBUTION_STATUSES
+    ]
+    succeeded_contributions = sorted(
+        [item for item in contributions if item.status in ACCOUNTED_CONTRIBUTION_STATUSES],
+        key=lambda item: (item.created_at, item.id),
+    )
+    pool_total_cents = sum(item.amount_cents for item in succeeded_contributions)
+    pool_original_cents = sum(item.amount_cents for item in succeeded_contributions if item.is_initial)
+    added_amount_cents = sum(
+        item.amount_cents for item in succeeded_contributions if not item.is_initial
+    )
+
+    if current_user_id is None:
+        return {
+            "my_contribution_cents": 0,
+            "my_original_contribution_cents": 0,
+            "my_added_contribution_cents": 0,
+            "pool_total_cents": pool_total_cents,
+            "pool_original_cents": pool_original_cents,
+            "added_amount_cents": added_amount_cents,
+        }
+
+    user_visible = [item for item in visible_contributions if item.user_id == current_user_id]
+    user_succeeded = [item for item in succeeded_contributions if item.user_id == current_user_id]
+    my_contribution_cents = sum(item.amount_cents for item in user_visible)
+
+    if current_user_id == requested_by_user_id:
+        my_original_contribution_cents = sum(
+            item.amount_cents for item in user_visible if item.is_initial
+        )
+        my_added_contribution_cents = sum(
+            item.amount_cents for item in user_succeeded if not item.is_initial
+        )
+    else:
+        my_original_contribution_cents = 0
+        my_added_contribution_cents = sum(
+            item.amount_cents for item in user_succeeded if not item.is_initial
+        )
+
+    return {
+        "my_contribution_cents": my_contribution_cents,
+        "my_original_contribution_cents": my_original_contribution_cents,
+        "my_added_contribution_cents": my_added_contribution_cents,
+        "pool_total_cents": pool_total_cents,
+        "pool_original_cents": pool_original_cents,
+        "added_amount_cents": added_amount_cents,
+    }
+
 
 def get_session_queue(db: Session, session_id: int) -> list[SongRequest]:
     stmt = (
         select(SongRequest)
-        .where(SongRequest.session_id == session_id)
+        .where(
+            SongRequest.session_id == session_id,
+            SongRequest.status.not_in(INACTIVE_QUEUE_STATUSES),
+        )
         .order_by(
             SongRequest.total_amount_cents.desc(),
             SongRequest.created_at.asc(),
@@ -64,11 +164,12 @@ def build_request_read(
         .order_by(Payment.created_at.desc(), Payment.id.desc())
     )
 
-    my_contribution_cents = sum(
-        item.amount_cents for item in contributions if current_user_id is not None and item.user_id == current_user_id
+    contribution_amounts = _compute_contribution_amounts(
+        contributions,
+        current_user_id=current_user_id,
+        requested_by_user_id=request.requested_by_user_id,
     )
-    contributor_user_ids = {item.user_id for item in contributions}
-    contributor_reads = [
+    individual_contributor_reads = [
         RequestContributorRead(
             id=item.id,
             user_id=item.user_id,
@@ -78,10 +179,17 @@ def build_request_read(
             avatar_url=users_by_id.get(item.user_id).avatar_url if users_by_id.get(item.user_id) else None,
             amount_cents=item.amount_cents,
             currency=item.currency,
+            is_initial=item.is_initial,
             status=item.status,
             created_at=item.created_at,
         )
         for item in contributions
+    ]
+    contributor_reads = _aggregate_contributors_per_user(contributions, users_by_id)
+    my_added_contributions = [
+        item
+        for item in individual_contributor_reads
+        if current_user_id is not None and item.user_id == current_user_id and not item.is_initial
     ]
 
     return RequestRead(
@@ -112,8 +220,14 @@ def build_request_read(
         event_id=session.event_id if session else None,
         requester_display_name=requester.display_name if requester else None,
         requester_avatar_url=requester.avatar_url if requester else None,
-        my_contribution_cents=my_contribution_cents,
-        contributor_count=len(contributor_user_ids),
+        my_contribution_cents=contribution_amounts["my_contribution_cents"],
+        my_original_contribution_cents=contribution_amounts["my_original_contribution_cents"],
+        my_added_contribution_cents=contribution_amounts["my_added_contribution_cents"],
+        total_pool_cents=contribution_amounts["pool_total_cents"],
+        pool_original_cents=contribution_amounts["pool_original_cents"],
+        added_amount_cents=contribution_amounts["added_amount_cents"],
+        my_added_contributions=my_added_contributions,
+        contributor_count=len(contributor_reads),
         latest_payment_id=latest_payment.id if latest_payment else None,
         latest_payment_status=latest_payment.status if latest_payment else None,
         checkout_url=latest_payment.checkout_url if latest_payment else None,

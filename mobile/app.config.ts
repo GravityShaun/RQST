@@ -18,6 +18,12 @@ const config: ExpoConfig = {
       },
     ],
     [
+      "expo-image-picker",
+      {
+        photosPermission: "RQST uses your photo library so you can upload a profile picture.",
+      },
+    ],
+    [
       "react-native-maps",
       {
         androidGoogleMapsApiKey: googleMapsApiKey,
@@ -37,6 +43,8 @@ const config: ExpoConfig = {
     bundleIdentifier: "com.gravshaun.rqst",
     infoPlist: {
       NSLocationWhenInUseUsageDescription: "RQST uses your location to show nearby DJs and venues on the map.",
+      NSPhotoLibraryAddUsageDescription: "RQST saves profile pictures you choose from your photo library.",
+      NSPhotoLibraryUsageDescription: "RQST uses your photo library so you can upload a profile picture.",
     },
   },
   android: {

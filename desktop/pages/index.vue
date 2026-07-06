@@ -1,7 +1,8 @@
-<template>
-  <div />
-</template>
-
 <script setup lang="ts">
-await navigateTo("/home");
+const authStore = useAuthStore();
+
+if (import.meta.client) {
+  await authStore.bootstrap();
+  await navigateTo(authStore.isAuthenticated ? "/home" : "/login");
+}
 </script>

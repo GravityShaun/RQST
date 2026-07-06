@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from pydantic import BaseModel, Field
 
 from app.schemas.common import APIModel
@@ -24,10 +22,8 @@ class DJProfileRead(APIModel):
     is_public: bool
 
 
-class EventCreate(BaseModel):
-    venue_id: int
-    name: str
-    starts_at: datetime
-    ends_at: datetime | None = None
-    ticket_url: str | None = None
+class DJDiscoverRead(DJProfileRead):
+    live_session_id: int | None = None
+    is_live: bool = False
+    venue_name: str | None = None
 

@@ -8,6 +8,7 @@ from app.api.deps import DBSession, require_role
 from app.models import DJProfile, DJSession, SessionStatus, User, UserRole
 from app.schemas.common import MessageResponse
 from app.schemas.sessions import SessionCreate, SessionRead, SessionUpdate
+from app.services.dj_sessions import get_active_dj_session
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 dj_router = APIRouter(prefix="/dj/sessions", tags=["dj-sessions"])
@@ -51,11 +52,7 @@ def get_current_session(
     profile = db.scalar(select(DJProfile).where(DJProfile.user_id == user.id))
     if not profile:
         return None
-    session = db.scalar(
-        select(DJSession)
-        .where(DJSession.dj_profile_id == profile.id)
-        .order_by(DJSession.created_at.desc())
-    )
+    session = get_active_dj_session(db, profile.id)
     return SessionRead.model_validate(session) if session else None
 
 

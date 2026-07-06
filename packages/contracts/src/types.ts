@@ -48,8 +48,73 @@ export interface RequestContributor {
   avatarUrl?: string | null;
   amountCents: number;
   currency: string;
+  isInitial: boolean;
   status: "pending_payment" | "succeeded" | "cancelled" | "refunded" | "disputed";
   createdAt: string;
+}
+
+export interface DjProfile {
+  id: number;
+  userId: number;
+  artistName: string;
+  slug: string;
+  bio?: string | null;
+  city?: string | null;
+  genresJson: string[];
+  isPublic: boolean;
+}
+
+export interface DjDiscoverProfile extends DjProfile {
+  liveSessionId?: number | null;
+  isLive: boolean;
+  venueName?: string | null;
+}
+
+export interface VenueSummary {
+  id: number;
+  name: string;
+  address: string;
+  city: string;
+  state?: string | null;
+  country: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  placeId?: string | null;
+}
+
+export interface PlaceSearchResult {
+  placeId: string;
+  name: string;
+  address: string;
+  city: string;
+  state?: string | null;
+  country: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  displayName: string;
+  source: "database" | "online";
+  venueId?: number | null;
+}
+
+export interface DjEvent {
+  id: number;
+  djProfileId: number;
+  name: string;
+  description?: string | null;
+  startsAt: string;
+  endsAt?: string | null;
+  ticketUrl?: string | null;
+  flyerUrl?: string | null;
+  venue: VenueSummary;
+}
+
+export interface UserProfile {
+  id: number;
+  email: string;
+  displayName: string;
+  avatarUrl?: string | null;
+  role: UserRole;
+  isEmailVerified: boolean;
 }
 
 export interface SongRequestSummary {
@@ -81,6 +146,12 @@ export interface SongRequestSummary {
   requesterDisplayName?: string | null;
   requesterAvatarUrl?: string | null;
   myContributionCents: number;
+  myOriginalContributionCents: number;
+  myAddedContributionCents: number;
+  totalPoolCents: number;
+  poolOriginalCents: number;
+  addedAmountCents: number;
+  myAddedContributions: RequestContributor[];
   contributorCount: number;
   latestPaymentId?: number | null;
   latestPaymentStatus?: string | null;
