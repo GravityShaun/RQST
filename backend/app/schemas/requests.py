@@ -67,6 +67,7 @@ class RequestRead(APIModel):
     venue_id: int | None = None
     venue_name: str | None = None
     event_id: int | None = None
+    event_name: str | None = None
     requester_display_name: str | None = None
     requester_avatar_url: str | None = None
     my_contribution_cents: int = 0

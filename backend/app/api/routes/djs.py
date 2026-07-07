@@ -7,10 +7,18 @@ from app.api.deps import DBSession, require_role
 from app.core.config import get_settings
 from app.models import DJProfile, Event, User, UserRole, Venue
 from app.schemas.djs import DJDiscoverRead, DJProfileCreate, DJProfileRead
-from app.schemas.events import EventCreate, EventRead, EventUpdate
+from app.schemas.earnings import DjEarningsDashboardRead, LedgerEntryRead, WithdrawRequest, WithdrawResponse
+from app.schemas.events import EventCreate, EventExtend, EventRead, EventUpdate
+from app.services.earnings import build_earnings_dashboard, list_ledger_entries, request_withdrawal
 from app.services.discover import get_discover_dj, list_discover_djs, list_public_djs
-from app.services.event_sessions import sync_live_sessions_for_events
-from app.services.events import find_or_create_venue, list_events_for_profile, serialize_event
+from app.services.event_sessions import is_event_live, sync_live_sessions_for_events
+from app.services.events import (
+    end_event_now,
+    extend_event_end,
+    find_or_create_venue,
+    list_events_for_profile,
+    serialize_event,
+)
 from app.services.flyers import FlyerValidationError, save_event_flyer
 
 router = APIRouter(prefix="/djs", tags=["djs"])
@@ -119,7 +127,7 @@ def create_event(
     event = Event(
         dj_profile_id=profile.id,
         venue_id=venue_id,
-        name=payload.name.strip(),
+        name=payload.name.strip() if payload.name and payload.name.strip() else None,
         description=payload.description.strip() if payload.description else None,
         starts_at=payload.starts_at,
         ends_at=payload.ends_at,
@@ -143,7 +151,7 @@ def update_event(
     event = _get_owned_event(db, profile, event_id)
 
     if payload.name is not None:
-        event.name = payload.name.strip()
+        event.name = payload.name.strip() or None
     if payload.description is not None:
         event.description = payload.description.strip() or None
     if payload.starts_at is not None:
@@ -160,6 +168,49 @@ def update_event(
             venue_payload=payload.venue,
         )
 
+    db.commit()
+    db.refresh(event)
+    sync_live_sessions_for_events(db)
+    return serialize_event(db, event)
+
+
+@router.post("/events/{event_id}/extend", response_model=EventRead)
+def extend_event(
+    event_id: int,
+    payload: EventExtend,
+    db: DBSession,
+    user: Annotated[User, Depends(require_role(UserRole.DJ, UserRole.ADMIN))],
+) -> EventRead:
+    profile = _get_profile(db, user)
+    event = _get_owned_event(db, profile, event_id)
+
+    if not is_event_live(event):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only live shows can be extended.")
+
+    try:
+        extend_event_end(event, payload.minutes)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    db.commit()
+    db.refresh(event)
+    sync_live_sessions_for_events(db)
+    return serialize_event(db, event)
+
+
+@router.post("/events/{event_id}/end", response_model=EventRead)
+def end_event(
+    event_id: int,
+    db: DBSession,
+    user: Annotated[User, Depends(require_role(UserRole.DJ, UserRole.ADMIN))],
+) -> EventRead:
+    profile = _get_profile(db, user)
+    event = _get_owned_event(db, profile, event_id)
+
+    if not is_event_live(event):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This show is not live.")
+
+    end_event_now(event)
     db.commit()
     db.refresh(event)
     sync_live_sessions_for_events(db)
@@ -222,11 +273,33 @@ def get_dj(slug: str, db: DBSession) -> DJDiscoverRead:
     return DJDiscoverRead.model_validate(get_discover_dj(db, profile))
 
 
-@dj_router.get("/payments", response_model=list[dict])
-def get_dj_payments() -> list[dict]:
-    return []
+@dj_router.get("/earnings", response_model=DjEarningsDashboardRead)
+def get_dj_earnings(
+    db: DBSession,
+    user: Annotated[User, Depends(require_role(UserRole.DJ, UserRole.ADMIN))],
+) -> DjEarningsDashboardRead:
+    profile = _get_profile(db, user)
+    return build_earnings_dashboard(db, profile.id)
 
 
-@dj_router.get("/earnings", response_model=dict)
-def get_dj_earnings() -> dict:
-    return {"pending_cents": 0, "available_cents": 0}
+@dj_router.get("/payments", response_model=list[LedgerEntryRead])
+def get_dj_payments(
+    db: DBSession,
+    user: Annotated[User, Depends(require_role(UserRole.DJ, UserRole.ADMIN))],
+    limit: int = 100,
+) -> list[LedgerEntryRead]:
+    profile = _get_profile(db, user)
+    return list_ledger_entries(db, profile.id, limit=min(limit, 200))
+
+
+@dj_router.post("/payouts/withdraw", response_model=WithdrawResponse)
+def withdraw_earnings(
+    payload: WithdrawRequest,
+    db: DBSession,
+    user: Annotated[User, Depends(require_role(UserRole.DJ, UserRole.ADMIN))],
+) -> WithdrawResponse:
+    profile = _get_profile(db, user)
+    message, polar_connected = request_withdrawal(db, profile.id, payload.amount_cents)
+    if polar_connected:
+        db.commit()
+    return WithdrawResponse(message=message, polar_connected=polar_connected)

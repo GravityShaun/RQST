@@ -1,6 +1,8 @@
 <template>
-  <div class="shell-grid">
-    <aside class="sidebar">
+  <div class="app-shell">
+
+    <div class="shell-grid">
+      <aside class="sidebar">
       <div class="sidebar-brand">
         <div class="eyebrow">RQST</div>
         <div class="sidebar-title">DJ Console</div>
@@ -20,15 +22,29 @@
         </button>
       </div>
     </aside>
-    <main class="content">
-      <slot />
-    </main>
+    <div class="content-column">
+      <header v-if="isLive" class="content-top-bar">
+        <LiveShowBar />
+      </header>
+      <main class="content">
+        <div class="content-body">
+          <slot />
+        </div>
+      </main>
+    </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+const { resolved } = useAppTheme();
+const { isLive } = useLiveShow();
 const authStore = useAuthStore();
 const user = computed(() => authStore.user);
+
+const topBarStyle = computed(() => ({
+  backgroundColor: resolved.value === "dark" ? "#243247" : "#e8eaec",
+}));
 
 const items = [
   { label: "Home", to: "/home" },
@@ -47,10 +63,10 @@ async function handleSignOut() {
 
 <style scoped>
 .sidebar {
-  align-self: start;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: 100%;
   position: sticky;
   top: 0;
 }
@@ -86,5 +102,19 @@ async function handleSignOut() {
   justify-content: center;
   margin-top: 8px;
   width: 100%;
+}
+
+.content-body {
+  padding: 32px 36px 48px;
+}
+
+@media (max-width: 960px) {
+  .content-top-bar {
+    padding: 10px 20px 0;
+  }
+
+  .content-body {
+    padding: 24px 20px 40px;
+  }
 }
 </style>

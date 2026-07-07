@@ -1,0 +1,22 @@
+{
+  "name": "@rqst/admin-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev --host 127.0.0.1 --port 3002",
+    "tauri": "tauri",
+    "build": "nuxt build",
+    "lint": "eslint .",
+    "test": "vitest --passWithNoTests"
+  },
+  "dependencies": {
+    "@pinia/nuxt": "0.10.1",
+    "nuxt": "^3.16.0",
+    "pinia": "^3.0.0",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}

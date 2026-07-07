@@ -6,6 +6,7 @@
   "workspaces": [
     "mobile",
     "desktop",
+    "admin_dashboard",
     "packages/*"
   ],
   "scripts": {
@@ -14,6 +15,7 @@
     "dev:mobile": "pnpm --filter @rqst/mobile dev",
     "dev:mobile:clear": "pnpm --filter @rqst/mobile dev:clear",
     "dev:desktop": "pnpm --filter @rqst/desktop dev",
+    "dev:admin": "pnpm --filter @rqst/admin-dashboard dev",
     "lint": "pnpm --filter @rqst/mobile lint && pnpm --filter @rqst/desktop lint",
     "test": "pnpm --filter @rqst/mobile test && pnpm --filter @rqst/desktop test",
     "contracts:generate": "pnpm --filter @rqst/contracts generate",

@@ -22,6 +22,30 @@ from app.services.payments import complete_successful_payment, should_auto_compl
 
 CONSOLE_DJ_EMAIL = "dj-console@example.com"
 CONSOLE_DJ_PASSWORD = "rqst-dj-console"
+CONSOLE_ADMIN_EMAIL = "admin-console@example.com"
+CONSOLE_ADMIN_PASSWORD = "rqst-admin-console"
+
+
+def ensure_admin_user(db: Session) -> User | None:
+    settings = get_settings()
+    if settings.environment != "local":
+        return None
+
+    user = db.scalar(select(User).where(User.email == CONSOLE_ADMIN_EMAIL))
+    if user:
+        return user
+
+    user = User(
+        email=CONSOLE_ADMIN_EMAIL,
+        password_hash=hash_password(CONSOLE_ADMIN_PASSWORD),
+        display_name="RQST Admin",
+        role=UserRole.ADMIN,
+        is_email_verified=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 def ensure_console_dj_user(db: Session) -> User | None:

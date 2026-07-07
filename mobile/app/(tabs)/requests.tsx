@@ -7,10 +7,12 @@ import { apiRouteBuilders, apiRoutes, type SongRequestSummary } from "@rqst/cont
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsFocused, useNavigation } from "@react-navigation/native";
 import { router } from "expo-router";
+import { usePremiumTheme, useResolvedColorScheme, useThemedStyles } from "../../src/store/theme";
 
+import { DarkGrainyGradientBackground } from "../../src/components/grainy-gradient/DarkGrainyGradient";
 import { GrainyGradientBackground } from "../../src/components/grainy-gradient/GrainyGradient";
 import { RequestCancelAction } from "../../src/components/RequestCancelAction";
-import { ScreenShell, SectionTitle, SurfaceCard, Tag, premiumTheme } from "../../src/components/premium-ui";
+import { ScreenShell, SectionTitle, SurfaceCard, Tag } from "../../src/components/premium-ui";
 import { DirectorySearch } from "../../src/features/discover/DirectorySearch";
 import { activeSession as mockActiveSession, initialUserRequests, songLibrary, type UserAddedContribution, type UserRequest } from "../../src/features/rqst/mock-data";
 import {
@@ -324,6 +326,1276 @@ function showSearchFirst(
 }
 
 export default function RequestsScreen() {
+  const theme = usePremiumTheme();
+  const resolvedScheme = useResolvedColorScheme();
+  const styles = useThemedStyles((activeTheme) => {
+    const isDark = activeTheme.colors.background === "#0B1118";
+
+    return StyleSheet.create({
+amountChip: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.backgroundSecondary,
+    borderColor: activeTheme.colors.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    justifyContent: "center",
+    minWidth: 70,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  amountChipSelected: {
+    backgroundColor: activeTheme.colors.coral,
+    borderColor: activeTheme.colors.coral,
+  },
+  amountChipText: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  amountChipTextSelected: {
+    color: activeTheme.colors.text,
+  },
+  amountRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  albumBackButton: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+  },
+  albumBackText: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  albumDetailCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  albumDetailHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    padding: 12,
+  },
+  albumDetailImage: {
+    borderRadius: 10,
+    height: 72,
+    width: 72,
+  },
+  albumDetailSubtitle: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  albumDetailTitle: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  albumGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    columnGap: 8,
+    rowGap: 12,
+    padding: 12,
+    paddingTop: 6,
+  },
+  albumSongSection: {
+    paddingBottom: 6,
+  },
+  albumTile: {
+    gap: 5,
+    width: "31.5%",
+  },
+  albumTileImage: {
+    aspectRatio: 1,
+    borderRadius: 10,
+    width: "100%",
+  },
+  albumTileTitle: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 14,
+  },
+  artistImage: {
+    borderRadius: 23,
+  },
+  artistPageTitle: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 22,
+    fontWeight: "800",
+    paddingHorizontal: 12,
+    paddingTop: 14,
+  },
+  artistStatus: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.backgroundSecondary,
+    borderRadius: 999,
+    height: 32,
+    justifyContent: "center",
+    width: 32,
+  },
+  bidCard: {
+    gap: 16,
+  },
+  bidHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 14,
+    justifyContent: "space-between",
+  },
+  bidHeaderCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  bidImage: {
+    borderRadius: 14,
+    height: 64,
+    width: 64,
+  },
+  bidSubtitle: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+  },
+  bidTitle: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 22,
+    fontWeight: "800",
+  },
+  content: {
+    gap: 16,
+    minHeight: "100%",
+    paddingBottom: 112,
+    position: "relative",
+  },
+  cta: {
+    alignItems: "center",
+    alignSelf: "stretch",
+    backgroundColor: activeTheme.colors.coral,
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    paddingVertical: 16,
+  },
+  ctaDisabled: {
+    backgroundColor: "#B9B3AE",
+  },
+  ctaText: {
+    color: activeTheme.colors.text,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  customInput: {
+    color: activeTheme.colors.ink,
+    flex: 1,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 18,
+    fontWeight: "700",
+    paddingVertical: 14,
+  },
+  customInputWrap: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.backgroundSecondary,
+    borderColor: activeTheme.colors.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 16,
+  },
+  customPrefix: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  customAmountButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(77, 134, 247, 0.11)",
+    borderColor: "rgba(77, 134, 247, 0.24)",
+    borderRadius: 999,
+    borderWidth: 1,
+    justifyContent: "center",
+    minWidth: 124,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  customAmountButtonText: {
+    color: "#2F5FBE",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  emptyState: {
+    gap: 6,
+  },
+  emptySubtitle: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 14,
+  },
+  emptyTitle: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  queuedEmptyState: {
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+  },
+  queuedEmptyText: {
+    textAlign: "center",
+  },
+  floorCopy: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  confirmAmountPill: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(224, 90, 71, 0.12)",
+    borderColor: "rgba(224, 90, 71, 0.22)",
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  confirmAmountText: {
+    color: activeTheme.colors.coral,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 2,
+  },
+  modalClose: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.backgroundSecondary,
+    borderRadius: 999,
+    height: 32,
+    justifyContent: "center",
+    width: 32,
+  },
+  modalContextItem: {
+    alignItems: "center",
+    backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(30, 23, 23, 0.04)",
+    borderColor: isDark ? "rgba(186, 210, 240, 0.12)" : "rgba(30, 23, 23, 0.06)",
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 5,
+    minWidth: 0,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+  modalContextRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+    paddingTop: 4,
+  },
+  modalContextText: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 11,
+    fontWeight: "800",
+    maxWidth: 124,
+  },
+  modalEyebrow: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  modalFinePrint: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  modalFinePrintError: {
+    color: activeTheme.colors.coral,
+    fontWeight: "700",
+  },
+  existingQueueBanner: {
+    alignItems: "flex-start",
+    backgroundColor: "rgba(47, 95, 190, 0.12)",
+    borderColor: "rgba(47, 95, 190, 0.32)",
+    borderRadius: 18,
+    borderWidth: 2,
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+  },
+  existingQueueBannerCopy: {
+    flex: 1,
+    gap: 10,
+  },
+  existingQueueTitle: {
+    color: siteThemeBlue,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 22,
+    fontWeight: "900",
+    letterSpacing: -0.4,
+  },
+  existingQueueStats: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 14,
+  },
+  existingQueueStatBlock: {
+    gap: 2,
+  },
+  existingQueueStatValue: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 20,
+    fontWeight: "900",
+  },
+  existingQueueStatLabel: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  existingQueueStatDivider: {
+    backgroundColor: "rgba(47, 95, 190, 0.28)",
+    height: 36,
+    width: 1,
+  },
+  modalHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  modalInput: {
+    color: activeTheme.colors.ink,
+    flex: 1,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 18,
+    fontWeight: "800",
+    paddingVertical: 12,
+  },
+  modalInputPrefix: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  modalInputWrap: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.backgroundSecondary,
+    borderColor: activeTheme.colors.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 14,
+  },
+  modalPrimaryButton: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.coral,
+    borderRadius: 999,
+    flex: 1,
+    justifyContent: "center",
+    paddingVertical: 12,
+  },
+  modalContributeButton: {
+    alignItems: "center",
+    backgroundColor: siteThemeBlue,
+    borderRadius: 999,
+    flex: 1,
+    justifyContent: "center",
+    paddingVertical: 12,
+  },
+  modalPrimaryText: {
+    color: activeTheme.colors.text,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  modalSecondaryButton: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.backgroundSecondary,
+    borderRadius: 999,
+    flex: 1,
+    justifyContent: "center",
+    paddingVertical: 12,
+  },
+  modalSecondaryText: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  modalSectionLabel: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  modalSubtitle: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  modalTitle: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 22,
+    fontWeight: "800",
+  },
+  popularRank: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    fontWeight: "800",
+    textAlign: "center",
+    width: 24,
+  },
+  popularSongContent: {
+    flex: 1,
+  },
+  popularSongRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    paddingLeft: 8,
+  },
+  requestButtons: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  requestCard: {
+    backgroundColor: isDark ? "rgba(28, 42, 61, 0.92)" : "rgba(255, 255, 255, 0.88)",
+    borderColor: isDark ? "rgba(186, 210, 240, 0.14)" : "rgba(255, 255, 255, 0.78)",
+    borderRadius: 22,
+    borderWidth: 1,
+    gap: 10,
+    overflow: "hidden",
+    padding: 14,
+    shadowOffset: { width: 0, height: 9 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+  },
+  queuedRequestCard: {
+    borderColor: "rgba(77, 134, 247, 0.22)",
+    shadowColor: "#4D86F7",
+    shadowOpacity: 0.1,
+  },
+  requestContextItem: {
+    alignItems: "center",
+    backgroundColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(255, 255, 255, 0.62)",
+    borderColor: isDark ? "rgba(186, 210, 240, 0.12)" : "rgba(30, 23, 23, 0.06)",
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: "row",
+    flex: 1,
+    gap: 5,
+    minWidth: 0,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+  },
+  requestContextRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  requestContextText: {
+    color: activeTheme.colors.inkMuted,
+    flex: 1,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  requestImage: {
+    borderRadius: 12,
+    height: 46,
+    width: 46,
+  },
+  requestList: {
+    gap: 10,
+  },
+  requestDrawer: {
+    alignSelf: "stretch",
+    backgroundColor: isDark ? activeTheme.colors.surfaceElevated : "#FFFFFF",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderTopColor: isDark ? "rgba(186, 210, 240, 0.12)" : "rgba(30, 23, 23, 0.08)",
+    borderTopWidth: 1,
+    elevation: 18,
+    flexGrow: 1,
+    gap: 14,
+    maxHeight: "90%",
+    minHeight: "58%",
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 34,
+    shadowColor: isDark ? "#000000" : "#1E1717",
+    shadowOffset: { width: 0, height: -12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 28,
+    width: "100%",
+  },
+  requestDrawerHandle: {
+    alignSelf: "center",
+    backgroundColor: isDark ? "rgba(186, 210, 240, 0.28)" : "rgba(30, 23, 23, 0.18)",
+    borderRadius: 999,
+    height: 5,
+    marginBottom: 2,
+    width: 42,
+  },
+  requestModalBackdrop: {
+    backgroundColor: isDark ? "rgba(3, 8, 20, 0.72)" : "rgba(30, 23, 23, 0.34)",
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  requestConfirmActions: {
+    flexDirection: "row",
+  },
+  requestTargetPicker: {
+    gap: 10,
+  },
+  requestTargetCardBorder: {
+    borderRadius: 20,
+    padding: 2,
+  },
+  requestTargetCardInner: {
+    backgroundColor: isDark ? activeTheme.colors.surface : "#FFFFFF",
+    borderRadius: 18,
+    gap: 10,
+    padding: 14,
+  },
+  requestTargetConfirmHighlight: {
+    color: activeTheme.colors.ink,
+    fontWeight: "800",
+  },
+  requestTargetConfirmRow: {
+    alignItems: "center",
+    backgroundColor: "rgba(224, 90, 71, 0.08)",
+    borderColor: "rgba(224, 90, 71, 0.16)",
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  requestTargetConfirmText: {
+    color: activeTheme.colors.inkMuted,
+    flex: 1,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 18,
+  },
+  requestTargetCopy: {
+    flex: 1,
+    gap: 4,
+    minWidth: 0,
+  },
+  requestTargetDj: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 22,
+    fontWeight: "800",
+    lineHeight: 26,
+  },
+  requestTargetEyebrow: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  requestTargetIconWrap: {
+    alignItems: "center",
+    borderRadius: 16,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  requestTargetLiveBadge: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.coral,
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  requestTargetLiveText: {
+    color: "#FFFFFF",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  requestTargetMain: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+  },
+  requestTargetVenue: {
+    color: activeTheme.colors.ink,
+    flex: 1,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 15,
+    fontWeight: "700",
+    lineHeight: 20,
+  },
+  requestTargetVenueRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 5,
+  },
+  requestModalFooter: {
+    gap: 10,
+    marginTop: "auto",
+  },
+  requestDetailGrid: {
+    columnGap: 8,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    rowGap: 8,
+  },
+  requestDetailItem: {
+    backgroundColor: activeTheme.colors.backgroundSecondary,
+    borderColor: "rgba(30, 23, 23, 0.05)",
+    borderRadius: 16,
+    borderWidth: 1,
+    flex: 1,
+    gap: 2,
+    minWidth: 92,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  requestDetailItemPrimary: {
+    backgroundColor: "rgba(184, 235, 221, 0.44)",
+  },
+  requestDragArea: {
+    alignItems: "center",
+    marginHorizontal: -18,
+    paddingBottom: 6,
+    paddingTop: 2,
+  },
+  requestDetailLabel: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  requestDetailHint: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 9,
+    fontWeight: "600",
+  },
+  requestDetailValue: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  requestDetailValueAdded: {
+    color: "#5E78B8",
+  },
+  requestYouRow: {
+    backgroundColor: activeTheme.colors.backgroundSecondary,
+    borderColor: "rgba(30, 23, 23, 0.05)",
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  requestYouLabel: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  requestYouBreakdown: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  requestYouPart: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  requestYouPartAdded: {
+    color: "#5E78B8",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  requestYouTotal: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  requestYouTotalMuted: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  addHistoryBackdrop: {
+    backgroundColor: isDark ? "rgba(3, 8, 20, 0.72)" : "rgba(30,23,23,0.4)",
+    flex: 1,
+    justifyContent: "flex-end",
+    padding: 16,
+  },
+  addHistoryButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(94, 120, 184, 0.08)",
+    borderColor: "rgba(94, 120, 184, 0.18)",
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  addHistoryButtonCopy: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  addHistoryButtonText: {
+    color: "#5E78B8",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  addHistoryCard: {
+    backgroundColor: activeTheme.colors.surfaceElevated,
+    borderRadius: 24,
+    gap: 14,
+    maxHeight: "78%",
+    padding: 20,
+  },
+  addHistoryCloseButton: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.surface,
+    borderRadius: 999,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  addHistoryEyebrow: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  addHistoryHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 12,
+  },
+  addHistoryHeaderCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  addHistoryItem: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.surface,
+    borderColor: activeTheme.colors.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+    padding: 12,
+  },
+  addHistoryItemAmount: {
+    color: "#5E78B8",
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 16,
+    fontWeight: "800",
+    textAlign: "right",
+  },
+  addHistoryItemCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  addHistoryItemDate: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+  },
+  addHistoryItemLabel: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  addHistoryItemMeta: {
+    alignItems: "flex-end",
+    gap: 2,
+  },
+  addHistoryItemStatus: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  addHistoryItemStatusPending: {
+    color: "#A3485B",
+  },
+  addHistoryList: {
+    gap: 10,
+    paddingRight: 2,
+  },
+  addHistoryListScroll: {
+    maxHeight: 420,
+  },
+  addHistoryEmpty: {
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+  },
+  addHistoryEmptyText: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+  },
+  addHistorySubtitle: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 14,
+  },
+  addHistoryTitle: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 24,
+    fontWeight: "800",
+  },
+  requestsSectionHeader: {
+    marginTop: 28,
+  },
+  requestSubtitle: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+  },
+  requestTitle: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 16,
+    fontWeight: "700",
+    lineHeight: 20,
+  },
+  requestTitleCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  requestTitleWrap: {
+    alignItems: "center",
+    flexDirection: "row",
+    flex: 1,
+    gap: 10,
+  },
+  requestTop: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "space-between",
+  },
+  requestTab: {
+    alignItems: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0)",
+    flex: 1,
+    justifyContent: "center",
+    paddingVertical: 9,
+  },
+  requestTabSelected: {
+    backgroundColor: activeTheme.colors.coral,
+    borderColor: "rgba(255, 198, 166, 0.72)",
+  },
+  requestTabs: {
+    backgroundColor: isDark ? "#4A5466" : "#ECEEF0",
+    borderColor: isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(255, 255, 255, 0.6)",
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 4,
+    overflow: "hidden",
+    padding: 4,
+  },
+  requestTabText: {
+    color: isDark ? "rgba(223, 230, 240, 0.92)" : activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  requestTabTextSelected: {
+    color: activeTheme.colors.text,
+  },
+  rqstModeTab: {
+    alignItems: "center",
+    backgroundColor: isDark ? "transparent" : "#ECEEF0",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0)",
+    flex: 1,
+    flexDirection: "row",
+    gap: 7,
+    justifyContent: "center",
+    minHeight: 42,
+    paddingHorizontal: 12,
+  },
+  rqstModeTabSelected: {
+    backgroundColor: activeTheme.colors.coral,
+    borderColor: "rgba(255, 198, 166, 0.72)",
+  },
+  rqstModeTabs: {
+    backgroundColor: isDark ? "#4A5466" : "#ECEEF0",
+    borderColor: isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(255, 255, 255, 0.66)",
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 4,
+    overflow: "hidden",
+    padding: 4,
+    zIndex: 1,
+  },
+  rqstModeTabText: {
+    color: isDark ? "rgba(223, 230, 240, 0.92)" : activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  rqstModeTabTextSelected: {
+    color: activeTheme.colors.text,
+  },
+  resultSection: {
+    borderBottomColor: activeTheme.colors.border,
+    borderBottomWidth: 1,
+    paddingBottom: 6,
+  },
+  resultSectionTitle: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 18,
+    fontWeight: "800",
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 4,
+  },
+  searchBar: {
+    alignItems: "center",
+    backgroundColor: isDark ? activeTheme.colors.surface : "#F5F6F7",
+    borderColor: isDark ? "rgba(186, 210, 240, 0.14)" : "rgba(255, 255, 255, 0.82)",
+    borderRadius: 26,
+    borderTopColor: isDark ? "rgba(186, 210, 240, 0.18)" : "rgba(255, 255, 255, 0.96)",
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 64,
+    overflow: "hidden",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  searchBarShell: {
+    backgroundColor: isDark ? activeTheme.colors.surfaceElevated : "#FFFFFF",
+    borderRadius: 30,
+    elevation: 12,
+    padding: 3,
+    shadowColor: isDark ? activeTheme.colors.shadow : "#C8D8F1",
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.22,
+    shadowRadius: 28,
+    zIndex: 1,
+  },
+  searchBarShellFocused: {
+    elevation: 16,
+    shadowOpacity: 0.28,
+  },
+  searchBarShellGradient: {
+    borderRadius: 27,
+    overflow: "hidden",
+  },
+  searchIconBadge: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.coral,
+    borderColor: "rgba(255, 255, 255, 0.56)",
+    borderWidth: 1,
+    borderRadius: 19,
+    height: 38,
+    justifyContent: "center",
+    width: 38,
+  },
+  searchInput: {
+    color: activeTheme.colors.ink,
+    flex: 1,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 17,
+    fontWeight: "700",
+    minHeight: 38,
+  },
+  searchError: {
+    color: activeTheme.colors.coral,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  searchPane: {
+    gap: 16,
+    minHeight: 500,
+    zIndex: 1,
+  },
+  searchTopSpacer: {
+    flexShrink: 0,
+  },
+  sessionNote: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+  },
+  shoutoutAddButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "#2F5FBE",
+    borderColor: "rgba(255, 255, 255, 0.4)",
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 5,
+    justifyContent: "center",
+    minHeight: 32,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  shoutoutAddButtonText: {
+    color: "#FFFFFF",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  shoutoutSupportingText: {
+    color: "#2F5FBE",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17,
+  },
+  shoutoutAmountChip: {
+    alignItems: "center",
+    backgroundColor: "rgba(47, 95, 190, 0.08)",
+    borderColor: "rgba(47, 95, 190, 0.18)",
+    borderRadius: 999,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 34,
+    minWidth: 58,
+    paddingHorizontal: 12,
+  },
+  shoutoutAmountChipSelected: {
+    backgroundColor: "#2F5FBE",
+    borderColor: "#2F5FBE",
+  },
+  shoutoutAmountChipText: {
+    color: "#2F5FBE",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  shoutoutAmountChipTextSelected: {
+    color: "#FFFFFF",
+  },
+  shoutoutAmountInput: {
+    color: "#2F5FBE",
+    flex: 1,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    fontWeight: "800",
+    paddingVertical: 8,
+  },
+  shoutoutAmountPrefix: {
+    color: "#2F5FBE",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  shoutoutAmountRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  shoutoutAmountWrap: {
+    alignItems: "center",
+    backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(255, 255, 255, 0.72)",
+    borderColor: "rgba(47, 95, 190, 0.18)",
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 4,
+    paddingHorizontal: 12,
+  },
+  shoutoutMessageInput: {
+    color: isDark ? "#8AB4F8" : "#2F5FBE",
+    backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(255, 255, 255, 0.72)",
+    borderColor: "rgba(47, 95, 190, 0.16)",
+    borderRadius: 14,
+    borderWidth: 1,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    fontWeight: "700",
+    minHeight: 74,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    textAlignVertical: "top",
+  },
+  shoutoutPanel: {
+    backgroundColor: "rgba(47, 95, 190, 0.08)",
+    borderColor: "rgba(47, 95, 190, 0.16)",
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 10,
+    padding: 10,
+  },
+  smallButton: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.coral,
+    borderRadius: 999,
+    justifyContent: "center",
+    minWidth: 76,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  smallButtonDisabled: {
+    backgroundColor: "#5C5E6C",
+    borderColor: "transparent",
+  },
+  smallButtonText: {
+    color: activeTheme.colors.text,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  songArtist: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+  },
+  songCard: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.surfaceElevated,
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 66,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  songCardSelected: {
+    backgroundColor: "rgba(224, 90, 71, 0.08)",
+  },
+  songCardDisabled: {
+    opacity: 0.55,
+  },
+  songCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  songImage: {
+    borderRadius: 8,
+    height: 46,
+    width: 46,
+  },
+  songList: {
+    backgroundColor: activeTheme.colors.surfaceElevated,
+    borderColor: activeTheme.colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  songResult: {
+    borderRadius: 0,
+  },
+  songStatus: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.backgroundSecondary,
+    borderRadius: 999,
+    height: 32,
+    justifyContent: "center",
+    width: 32,
+  },
+  songStatusSelected: {
+    backgroundColor: activeTheme.colors.coral,
+  },
+  songStatusDisabled: {
+    opacity: 0.45,
+  },
+  songTitle: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  topResultCard: {
+    gap: 12,
+    minHeight: 84,
+    paddingBottom: 12,
+    paddingTop: 10,
+  },
+  topResultImage: {
+    borderRadius: 12,
+    height: 60,
+    width: 60,
+  },
+  topResultArtistImage: {
+    borderRadius: 30,
+  },
+  topResultTitle: {
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 19,
+    fontWeight: "800",
+  },
+    });
+  });
+
   const queryClient = useQueryClient();
   const navigation = useNavigation();
   const isScreenFocused = useIsFocused();
@@ -363,7 +1635,9 @@ export default function RequestsScreen() {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [songSearchError, setSongSearchError] = useState("");
   const [requestSubmitError, setRequestSubmitError] = useState("");
-  const { sessionId, requestFloorCents, djName, venueName, hasSession } = useActiveSession({ requireSelection: true });
+  const { sessionId, requestFloorCents, djName, venueName, hasSession, isSessionLive } = useActiveSession({
+    requireSelection: true,
+  });
   const myRequestsQuery = useQuery({
     queryKey: ["meRequests"],
     queryFn: () => rqstApi<SongRequestSummary[]>(apiRoutes.meRequests.replace("/api/v1", "")),
@@ -510,6 +1784,7 @@ export default function RequestsScreen() {
   const shoutoutAmountCents = showShoutoutRequest ? Math.max(Number(shoutoutAmount || 0), 0) * 100 : 0;
   const requestTotalCents = bidCents + shoutoutAmountCents;
   const canSubmitNew =
+    isSessionLive &&
     hasSession &&
     Boolean(selectedSong) &&
     !isExistingQueueSong &&
@@ -518,24 +1793,36 @@ export default function RequestsScreen() {
     requestTotalCents >= requestFloorCents &&
     (!showShoutoutRequest || (shoutoutMessage.trim().length > 0 && shoutoutAmountCents > 0));
   const canSubmitContribution =
+    isSessionLive &&
     hasSession &&
     Boolean(selectedSong) &&
     isExistingQueueSong &&
     requestFloorCents != null &&
     Number.isFinite(bidCents) &&
     bidCents >= requestFloorCents;
+  const mySessionRequests = useMemo(
+    () =>
+      sessionId == null
+        ? []
+        : (myRequestsQuery.data ?? []).filter((request) => request.sessionId === sessionId),
+    [myRequestsQuery.data, sessionId],
+  );
   const canSubmit = isExistingQueueSong ? canSubmitContribution : canSubmitNew;
   const isSubmitPending = isExistingQueueSong ? contributeMutation.isPending : createRequestMutation.isPending;
   const requests = useMemo(() => {
     if (isSignedIn) {
-      return (myRequestsQuery.data ?? []).map((request) => mapBackendRequest(request, currentUserId));
+      return mySessionRequests.map((request) => mapBackendRequest(request, currentUserId));
+    }
+
+    if (!sessionId) {
+      return [];
     }
 
     return localRequests;
-  }, [currentUserId, isSignedIn, localRequests, myRequestsQuery.data]);
+  }, [currentUserId, isSignedIn, localRequests, mySessionRequests, sessionId]);
   const myRequestsById = useMemo(
-    () => new Map((myRequestsQuery.data ?? []).map((request) => [request.id, request])),
-    [myRequestsQuery.data],
+    () => new Map(mySessionRequests.map((request) => [request.id, request])),
+    [mySessionRequests],
   );
   const queuedRequests = requests.filter(
     (request) => request.status !== "Played" && request.status !== "Canceled",
@@ -709,7 +1996,24 @@ export default function RequestsScreen() {
     };
   }, [deferredQuery, normalizedQuery, selectedArtistName]);
 
+  function focusSongSearch() {
+    if (!isSessionLive) {
+      setRequestSubmitError("Choose a live show before adding songs.");
+      return;
+    }
+
+    showSearchFirst(scrollRef, searchDockProgress, setRqstModeTab, true);
+    setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 180);
+  }
+
   function handleSelectSong(songId: number | string) {
+    if (!isSessionLive) {
+      setRequestSubmitError("This show is no longer live. Find a live DJ or artist to request songs.");
+      return;
+    }
+
     setRequestSubmitError("");
     setSelectedSongId(songId);
     if (selectedAmount === customAmountValue && !customAmount) {
@@ -782,7 +2086,7 @@ export default function RequestsScreen() {
             </Text>
           </View>
           <View style={styles.artistStatus}>
-            <Ionicons name="person" size={16} color={premiumTheme.colors.inkMuted} />
+            <Ionicons name="person" size={16} color={theme.colors.inkMuted} />
           </View>
         </View>
       </Pressable>
@@ -791,10 +2095,23 @@ export default function RequestsScreen() {
 
   function renderSongResult(song: SearchSong, variant: "top" | "list" = "list") {
     const selected = selectedSong?.id === song.id;
+    const canRequestSong = isSessionLive;
 
     return (
-      <Pressable key={song.id} onPress={() => handleSelectSong(song.id)} style={styles.songResult}>
-        <View style={[styles.songCard, variant === "top" && styles.topResultCard, selected && styles.songCardSelected]}>
+      <Pressable
+        key={song.id}
+        disabled={!canRequestSong}
+        onPress={() => handleSelectSong(song.id)}
+        style={styles.songResult}
+      >
+        <View
+          style={[
+            styles.songCard,
+            variant === "top" && styles.topResultCard,
+            selected && styles.songCardSelected,
+            !canRequestSong && styles.songCardDisabled,
+          ]}
+        >
           <Image source={{ uri: getSongImageUri(song) }} style={[styles.songImage, variant === "top" && styles.topResultImage]} />
           <View style={styles.songCopy}>
             <Text numberOfLines={1} style={[styles.songTitle, variant === "top" && styles.topResultTitle]}>
@@ -806,13 +2123,14 @@ export default function RequestsScreen() {
           </View>
           <Pressable
             accessibilityLabel={`Request ${song.title}`}
+            disabled={!canRequestSong}
             onPress={() => handleSelectSong(song.id)}
-            style={[styles.songStatus, selected && styles.songStatusSelected]}
+            style={[styles.songStatus, selected && styles.songStatusSelected, !canRequestSong && styles.songStatusDisabled]}
           >
             <Ionicons
               name={selected ? "checkmark" : song.external_source === "apple_music" ? "musical-notes" : "add"}
               size={17}
-              color={selected ? premiumTheme.colors.text : premiumTheme.colors.inkMuted}
+              color={selected ? theme.colors.text : theme.colors.inkMuted}
             />
           </Pressable>
         </View>
@@ -936,7 +2254,7 @@ export default function RequestsScreen() {
     }
 
     setRequestSubmitError("");
-    if (!hasSession || sessionId == null) {
+    if (!isSessionLive || !hasSession || sessionId == null) {
       setRequestSubmitError("Choose a live DJ or artist before confirming this request.");
       return;
     }
@@ -1023,14 +2341,24 @@ export default function RequestsScreen() {
         />
       }
     >
-      <GrainyGradientBackground
-        amplitude={0.12}
-        animated
-        colors={["#b01818", "#b3aeb9", "#073990"]}
-        intensity={0.022}
-        size={5.2}
-        speed={0.85}
-      />
+      {resolvedScheme === "dark" ? (
+        <DarkGrainyGradientBackground
+          amplitude={0.12}
+          animated
+          intensity={0.022}
+          size={5.2}
+          speed={0.85}
+        />
+      ) : (
+        <GrainyGradientBackground
+          amplitude={0.12}
+          animated
+          colors={["#b01818", "#b3aeb9", "#073990"]}
+          intensity={0.022}
+          size={5.2}
+          speed={0.85}
+        />
+      )}
       <View style={styles.rqstModeTabs}>
         {rqstModeTabs.map((tab) => {
           const selected = rqstModeTab === tab;
@@ -1044,7 +2372,13 @@ export default function RequestsScreen() {
               <Ionicons
                 name={tab === "search" ? "search" : "albums-outline"}
                 size={16}
-                color={selected ? premiumTheme.colors.text : premiumTheme.colors.inkMuted}
+                color={
+                  selected
+                    ? theme.colors.text
+                    : resolvedScheme === "dark"
+                      ? "rgba(223, 230, 240, 0.92)"
+                      : theme.colors.inkMuted
+                }
               />
               <Text style={[styles.rqstModeTabText, selected && styles.rqstModeTabTextSelected]}>
                 {tab === "search" ? "Search" : "Requested"}
@@ -1056,13 +2390,25 @@ export default function RequestsScreen() {
 
       {rqstModeTab === "search" ? (
         <View style={styles.searchPane}>
+          {!hasSession ? (
+            <SurfaceCard style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>No live show selected</Text>
+              <Text style={styles.sessionNote}>
+                Find a live DJ or artist on the Find tab, then request songs for that set.
+              </Text>
+            </SurfaceCard>
+          ) : null}
           <Animated.View style={[styles.searchTopSpacer, { height: searchTopSpacerHeight }]} />
           <View style={[styles.searchBarShell, isSearchFocused && styles.searchBarShellFocused]}>
             <LinearGradient
               colors={
-                isSearchFocused
-                  ? ["rgba(255, 255, 255, 0.72)", "rgba(255, 255, 255, 0.28)", "rgba(255, 255, 255, 0.56)"]
-                  : ["rgba(255, 255, 255, 0.56)", "rgba(255, 255, 255, 0.18)", "rgba(255, 255, 255, 0.42)"]
+                resolvedScheme === "dark"
+                  ? isSearchFocused
+                    ? ["rgba(28, 42, 61, 0.96)", "rgba(16, 26, 42, 0.88)", "rgba(24, 36, 56, 0.92)"]
+                    : ["rgba(28, 42, 61, 0.88)", "rgba(12, 20, 34, 0.82)", "rgba(20, 32, 50, 0.86)"]
+                  : isSearchFocused
+                    ? ["rgba(255, 255, 255, 0.72)", "rgba(255, 255, 255, 0.28)", "rgba(255, 255, 255, 0.56)"]
+                    : ["rgba(255, 255, 255, 0.56)", "rgba(255, 255, 255, 0.18)", "rgba(255, 255, 255, 0.42)"]
               }
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
@@ -1079,7 +2425,7 @@ export default function RequestsScreen() {
                 onChangeText={handleChangeQuery}
                 onFocus={() => setIsSearchFocused(true)}
                 placeholder="Search by song or artist"
-                placeholderTextColor="rgba(30, 23, 23, 0.48)"
+                placeholderTextColor={theme.colors.inkMuted}
                 style={styles.searchInput}
               />
             </View>
@@ -1097,7 +2443,7 @@ export default function RequestsScreen() {
                   {selectedAlbum ? (
                     <View style={styles.albumSongSection}>
                       <Pressable onPress={() => setSelectedAlbumName("")} style={styles.albumBackButton}>
-                        <Ionicons name="chevron-back" size={16} color={premiumTheme.colors.inkMuted} />
+                        <Ionicons name="chevron-back" size={16} color={theme.colors.inkMuted} />
                         <Text style={styles.albumBackText}>Albums</Text>
                       </Pressable>
                       <View style={styles.albumDetailHeader}>
@@ -1183,7 +2529,14 @@ export default function RequestsScreen() {
       ) : (
         <>
           <View style={styles.requestsSectionHeader}>
-            <SectionTitle title="My requests" subtitle="Add money to open songs while they are still eligible." />
+            <SectionTitle
+              title="My requests"
+              subtitle={
+                hasSession && djName
+                  ? `Songs you requested for ${djName}${venueName ? ` at ${venueName}` : ""}.`
+                  : "Choose a live show to see your requests for that set."
+              }
+            />
           </View>
           <View style={styles.requestTabs}>
             {requestTabs.map((tab) => {
@@ -1241,13 +2594,13 @@ export default function RequestsScreen() {
                   </View>
                   <View style={styles.requestContextRow}>
                     <View style={styles.requestContextItem}>
-                      <Ionicons name="time-outline" size={14} color={premiumTheme.colors.inkMuted} />
+                      <Ionicons name="time-outline" size={14} color={theme.colors.inkMuted} />
                       <Text numberOfLines={1} style={styles.requestContextText}>
                         {formatRequestDateTime(request.submittedAt)}
                       </Text>
                     </View>
                     <View style={styles.requestContextItem}>
-                      <Ionicons name="location-outline" size={14} color={premiumTheme.colors.inkMuted} />
+                      <Ionicons name="location-outline" size={14} color={theme.colors.inkMuted} />
                       <Text numberOfLines={1} style={styles.requestContextText}>
                         {request.venue}
                       </Text>
@@ -1309,10 +2662,10 @@ export default function RequestsScreen() {
                             : "All up-requests"}
                         </Text>
                       </View>
-                      <Ionicons name="chevron-forward" size={16} color={premiumTheme.colors.inkMuted} />
+                      <Ionicons name="chevron-forward" size={16} color={theme.colors.inkMuted} />
                     </Pressable>
                   ) : null}
-                  {request.status === "Open" ? (
+                  {request.status === "Open" && isSessionLive ? (
                     <View style={styles.requestButtons}>
                       <Pressable onPress={() => openContributionModal(request.id, 500)} style={styles.smallButton}>
                         <Text style={styles.smallButtonText}>Add $5</Text>
@@ -1328,6 +2681,31 @@ export default function RequestsScreen() {
                 </SurfaceCard>
               );
             })}
+            {requestTab === "queued" && queuedRequests.length === 0 ? (
+              <SurfaceCard style={styles.queuedEmptyState}>
+                <Text style={[styles.emptyTitle, styles.queuedEmptyText]}>
+                  {!hasSession ? "No live show selected" : "No songs in the queue"}
+                </Text>
+                <Text style={[styles.emptySubtitle, styles.queuedEmptyText]}>
+                  {!hasSession
+                    ? "Find a live DJ or artist on the List tab, then request songs for that show."
+                    : isSessionLive
+                      ? "Request a song to get in line for this set."
+                      : "This show is no longer accepting requests."}
+                </Text>
+                {hasSession && isSessionLive ? (
+                  <Pressable
+                    accessibilityLabel="Add a song"
+                    accessibilityRole="button"
+                    onPress={focusSongSearch}
+                    style={[styles.cta, { marginTop: 8 }]}
+                  >
+                    <Ionicons name="add" size={18} color={theme.colors.text} />
+                    <Text style={styles.ctaText}>Add a song</Text>
+                  </Pressable>
+                ) : null}
+              </SurfaceCard>
+            ) : null}
           </View>
         </>
       )}
@@ -1349,7 +2727,7 @@ export default function RequestsScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalEyebrow}>Confirm contribution</Text>
               <Pressable accessibilityLabel="Close contribution modal" onPress={closeContributionModal} style={styles.modalClose}>
-                <Ionicons name="close" size={18} color={premiumTheme.colors.inkMuted} />
+                <Ionicons name="close" size={18} color={theme.colors.inkMuted} />
               </Pressable>
             </View>
             <Text style={styles.modalTitle}>{contributionRequest?.title ?? "Request"}</Text>
@@ -1364,7 +2742,7 @@ export default function RequestsScreen() {
                   onChangeText={setCustomContributionAmount}
                   keyboardType="numeric"
                   placeholder="Enter amount"
-                  placeholderTextColor="rgba(30, 23, 23, 0.48)"
+                  placeholderTextColor={theme.colors.inkMuted}
                   style={styles.modalInput}
                 />
               </View>
@@ -1410,7 +2788,7 @@ export default function RequestsScreen() {
                 onPress={() => setAddHistoryRequestId(null)}
                 style={styles.addHistoryCloseButton}
               >
-                <Ionicons name="close" size={18} color={premiumTheme.colors.ink} />
+                <Ionicons name="close" size={18} color={theme.colors.ink} />
               </Pressable>
             </View>
             <ScrollView
@@ -1472,7 +2850,7 @@ export default function RequestsScreen() {
                 {isExistingQueueSong ? "Add to existing request" : "Confirm song request"}
               </Text>
               <Pressable accessibilityLabel="Close request modal" onPress={closeRequestModal} style={styles.modalClose}>
-                <Ionicons name="close" size={18} color={premiumTheme.colors.inkMuted} />
+                <Ionicons name="close" size={18} color={theme.colors.inkMuted} />
               </Pressable>
             </View>
 
@@ -1552,7 +2930,7 @@ export default function RequestsScreen() {
                           {djName}
                         </Text>
                         <View style={styles.requestTargetVenueRow}>
-                          <Ionicons color={premiumTheme.colors.coral} name="location" size={14} />
+                          <Ionicons color={theme.colors.coral} name="location" size={14} />
                           <Text numberOfLines={1} style={styles.requestTargetVenue}>
                             {venueName}
                           </Text>
@@ -1607,7 +2985,7 @@ export default function RequestsScreen() {
                   onChangeText={setCustomAmount}
                   keyboardType="numeric"
                   placeholder="Enter amount"
-                  placeholderTextColor="rgba(30, 23, 23, 0.48)"
+                  placeholderTextColor={theme.colors.inkMuted}
                   style={styles.modalInput}
                 />
               </View>
@@ -1687,7 +3065,7 @@ export default function RequestsScreen() {
             <View style={styles.requestModalFooter}>
               {!isExistingQueueSong && hasSession ? (
               <View style={styles.requestTargetConfirmRow}>
-                <Ionicons color={premiumTheme.colors.coral} name="checkmark-circle" size={16} />
+                <Ionicons color={theme.colors.coral} name="checkmark-circle" size={16} />
                 <Text style={styles.requestTargetConfirmText}>
                   Sending to{" "}
                   <Text style={styles.requestTargetConfirmHighlight}>{djName}</Text>
@@ -1744,1252 +3122,3 @@ export default function RequestsScreen() {
     </ScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  amountChip: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.backgroundSecondary,
-    borderColor: premiumTheme.colors.border,
-    borderRadius: 999,
-    borderWidth: 1,
-    justifyContent: "center",
-    minWidth: 70,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  amountChipSelected: {
-    backgroundColor: premiumTheme.colors.coral,
-    borderColor: premiumTheme.colors.coral,
-  },
-  amountChipText: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  amountChipTextSelected: {
-    color: premiumTheme.colors.text,
-  },
-  amountRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  albumBackButton: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingTop: 12,
-  },
-  albumBackText: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  albumDetailCopy: {
-    flex: 1,
-    gap: 4,
-  },
-  albumDetailHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    padding: 12,
-  },
-  albumDetailImage: {
-    borderRadius: 10,
-    height: 72,
-    width: 72,
-  },
-  albumDetailSubtitle: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  albumDetailTitle: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 18,
-    fontWeight: "800",
-  },
-  albumGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    columnGap: 8,
-    rowGap: 12,
-    padding: 12,
-    paddingTop: 6,
-  },
-  albumSongSection: {
-    paddingBottom: 6,
-  },
-  albumTile: {
-    gap: 5,
-    width: "31.5%",
-  },
-  albumTileImage: {
-    aspectRatio: 1,
-    borderRadius: 10,
-    width: "100%",
-  },
-  albumTileTitle: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 11,
-    fontWeight: "700",
-    lineHeight: 14,
-  },
-  artistImage: {
-    borderRadius: 23,
-  },
-  artistPageTitle: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 22,
-    fontWeight: "800",
-    paddingHorizontal: 12,
-    paddingTop: 14,
-  },
-  artistStatus: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.backgroundSecondary,
-    borderRadius: 999,
-    height: 32,
-    justifyContent: "center",
-    width: 32,
-  },
-  bidCard: {
-    gap: 16,
-  },
-  bidHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 14,
-    justifyContent: "space-between",
-  },
-  bidHeaderCopy: {
-    flex: 1,
-    gap: 4,
-  },
-  bidImage: {
-    borderRadius: 14,
-    height: 64,
-    width: 64,
-  },
-  bidSubtitle: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-  },
-  bidTitle: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  content: {
-    gap: 16,
-    minHeight: "100%",
-    paddingBottom: 112,
-    position: "relative",
-  },
-  cta: {
-    alignItems: "center",
-    alignSelf: "stretch",
-    backgroundColor: premiumTheme.colors.coral,
-    borderRadius: 999,
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "center",
-    paddingVertical: 16,
-  },
-  ctaDisabled: {
-    backgroundColor: "#B9B3AE",
-  },
-  ctaText: {
-    color: premiumTheme.colors.text,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  customInput: {
-    color: premiumTheme.colors.ink,
-    flex: 1,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 18,
-    fontWeight: "700",
-    paddingVertical: 14,
-  },
-  customInputWrap: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.backgroundSecondary,
-    borderColor: premiumTheme.colors.border,
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 6,
-    paddingHorizontal: 16,
-  },
-  customPrefix: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  customAmountButton: {
-    alignItems: "center",
-    backgroundColor: "rgba(77, 134, 247, 0.11)",
-    borderColor: "rgba(77, 134, 247, 0.24)",
-    borderRadius: 999,
-    borderWidth: 1,
-    justifyContent: "center",
-    minWidth: 124,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  customAmountButtonText: {
-    color: "#2F5FBE",
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  emptyState: {
-    gap: 6,
-  },
-  emptySubtitle: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 14,
-  },
-  emptyTitle: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 20,
-    fontWeight: "700",
-  },
-  floorCopy: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  confirmAmountPill: {
-    alignItems: "center",
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(224, 90, 71, 0.12)",
-    borderColor: "rgba(224, 90, 71, 0.22)",
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  confirmAmountText: {
-    color: premiumTheme.colors.coral,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 18,
-    fontWeight: "800",
-  },
-  modalActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 2,
-  },
-  modalClose: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.backgroundSecondary,
-    borderRadius: 999,
-    height: 32,
-    justifyContent: "center",
-    width: 32,
-  },
-  modalContextItem: {
-    alignItems: "center",
-    backgroundColor: "rgba(30, 23, 23, 0.04)",
-    borderColor: "rgba(30, 23, 23, 0.06)",
-    borderRadius: 999,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 5,
-    minWidth: 0,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-  },
-  modalContextRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 7,
-    paddingTop: 4,
-  },
-  modalContextText: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 11,
-    fontWeight: "800",
-    maxWidth: 124,
-  },
-  modalEyebrow: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 11,
-    fontWeight: "800",
-    textTransform: "uppercase",
-  },
-  modalFinePrint: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  modalFinePrintError: {
-    color: premiumTheme.colors.coral,
-    fontWeight: "700",
-  },
-  existingQueueBanner: {
-    alignItems: "flex-start",
-    backgroundColor: "rgba(47, 95, 190, 0.12)",
-    borderColor: "rgba(47, 95, 190, 0.32)",
-    borderRadius: 18,
-    borderWidth: 2,
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 16,
-  },
-  existingQueueBannerCopy: {
-    flex: 1,
-    gap: 10,
-  },
-  existingQueueTitle: {
-    color: siteThemeBlue,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 22,
-    fontWeight: "900",
-    letterSpacing: -0.4,
-  },
-  existingQueueStats: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 14,
-  },
-  existingQueueStatBlock: {
-    gap: 2,
-  },
-  existingQueueStatValue: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 20,
-    fontWeight: "900",
-  },
-  existingQueueStatLabel: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 11,
-    fontWeight: "700",
-    textTransform: "uppercase",
-  },
-  existingQueueStatDivider: {
-    backgroundColor: "rgba(47, 95, 190, 0.28)",
-    height: 36,
-    width: 1,
-  },
-  modalHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  modalInput: {
-    color: premiumTheme.colors.ink,
-    flex: 1,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 18,
-    fontWeight: "800",
-    paddingVertical: 12,
-  },
-  modalInputPrefix: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 18,
-    fontWeight: "800",
-  },
-  modalInputWrap: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.backgroundSecondary,
-    borderColor: premiumTheme.colors.border,
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 6,
-    paddingHorizontal: 14,
-  },
-  modalPrimaryButton: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.coral,
-    borderRadius: 999,
-    flex: 1,
-    justifyContent: "center",
-    paddingVertical: 12,
-  },
-  modalContributeButton: {
-    alignItems: "center",
-    backgroundColor: siteThemeBlue,
-    borderRadius: 999,
-    flex: 1,
-    justifyContent: "center",
-    paddingVertical: 12,
-  },
-  modalPrimaryText: {
-    color: premiumTheme.colors.text,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  modalSecondaryButton: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.backgroundSecondary,
-    borderRadius: 999,
-    flex: 1,
-    justifyContent: "center",
-    paddingVertical: 12,
-  },
-  modalSecondaryText: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  modalSectionLabel: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 11,
-    fontWeight: "800",
-    textTransform: "uppercase",
-  },
-  modalSubtitle: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  modalTitle: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  popularRank: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-    fontWeight: "800",
-    textAlign: "center",
-    width: 24,
-  },
-  popularSongContent: {
-    flex: 1,
-  },
-  popularSongRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    paddingLeft: 8,
-  },
-  requestButtons: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  requestCard: {
-    backgroundColor: "rgba(255, 255, 255, 0.88)",
-    borderColor: "rgba(255, 255, 255, 0.78)",
-    borderRadius: 22,
-    borderWidth: 1,
-    gap: 10,
-    overflow: "hidden",
-    padding: 14,
-    shadowOffset: { width: 0, height: 9 },
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-  },
-  queuedRequestCard: {
-    borderColor: "rgba(77, 134, 247, 0.22)",
-    shadowColor: "#4D86F7",
-    shadowOpacity: 0.1,
-  },
-  requestContextItem: {
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.62)",
-    borderColor: "rgba(30, 23, 23, 0.06)",
-    borderRadius: 999,
-    borderWidth: 1,
-    flexDirection: "row",
-    flex: 1,
-    gap: 5,
-    minWidth: 0,
-    paddingHorizontal: 9,
-    paddingVertical: 7,
-  },
-  requestContextRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  requestContextText: {
-    color: premiumTheme.colors.inkMuted,
-    flex: 1,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  requestImage: {
-    borderRadius: 12,
-    height: 46,
-    width: 46,
-  },
-  requestList: {
-    gap: 10,
-  },
-  requestDrawer: {
-    alignSelf: "stretch",
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderTopColor: "rgba(30, 23, 23, 0.08)",
-    borderTopWidth: 1,
-    elevation: 18,
-    flexGrow: 1,
-    gap: 14,
-    maxHeight: "90%",
-    minHeight: "58%",
-    paddingHorizontal: 18,
-    paddingTop: 10,
-    paddingBottom: 34,
-    shadowColor: "#1E1717",
-    shadowOffset: { width: 0, height: -12 },
-    shadowOpacity: 0.18,
-    shadowRadius: 28,
-    width: "100%",
-  },
-  requestDrawerHandle: {
-    alignSelf: "center",
-    backgroundColor: "rgba(30, 23, 23, 0.18)",
-    borderRadius: 999,
-    height: 5,
-    marginBottom: 2,
-    width: 42,
-  },
-  requestModalBackdrop: {
-    backgroundColor: "rgba(30, 23, 23, 0.34)",
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  requestConfirmActions: {
-    flexDirection: "row",
-  },
-  requestTargetPicker: {
-    gap: 10,
-  },
-  requestTargetCardBorder: {
-    borderRadius: 20,
-    padding: 2,
-  },
-  requestTargetCardInner: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    gap: 10,
-    padding: 14,
-  },
-  requestTargetConfirmHighlight: {
-    color: premiumTheme.colors.ink,
-    fontWeight: "800",
-  },
-  requestTargetConfirmRow: {
-    alignItems: "center",
-    backgroundColor: "rgba(224, 90, 71, 0.08)",
-    borderColor: "rgba(224, 90, 71, 0.16)",
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  requestTargetConfirmText: {
-    color: premiumTheme.colors.inkMuted,
-    flex: 1,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 18,
-  },
-  requestTargetCopy: {
-    flex: 1,
-    gap: 4,
-    minWidth: 0,
-  },
-  requestTargetDj: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 22,
-    fontWeight: "800",
-    lineHeight: 26,
-  },
-  requestTargetEyebrow: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-  },
-  requestTargetIconWrap: {
-    alignItems: "center",
-    borderRadius: 16,
-    height: 44,
-    justifyContent: "center",
-    width: 44,
-  },
-  requestTargetLiveBadge: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.coral,
-    borderRadius: 999,
-    flexDirection: "row",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  requestTargetLiveText: {
-    color: "#FFFFFF",
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  requestTargetMain: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-  },
-  requestTargetVenue: {
-    color: premiumTheme.colors.ink,
-    flex: 1,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 15,
-    fontWeight: "700",
-    lineHeight: 20,
-  },
-  requestTargetVenueRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 5,
-  },
-  requestModalFooter: {
-    gap: 10,
-    marginTop: "auto",
-  },
-  requestDetailGrid: {
-    columnGap: 8,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    rowGap: 8,
-  },
-  requestDetailItem: {
-    backgroundColor: premiumTheme.colors.backgroundSecondary,
-    borderColor: "rgba(30, 23, 23, 0.05)",
-    borderRadius: 16,
-    borderWidth: 1,
-    flex: 1,
-    gap: 2,
-    minWidth: 92,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  requestDetailItemPrimary: {
-    backgroundColor: "rgba(184, 235, 221, 0.44)",
-  },
-  requestDragArea: {
-    alignItems: "center",
-    marginHorizontal: -18,
-    paddingBottom: 6,
-    paddingTop: 2,
-  },
-  requestDetailLabel: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 10,
-    fontWeight: "800",
-    textTransform: "uppercase",
-  },
-  requestDetailHint: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 9,
-    fontWeight: "600",
-  },
-  requestDetailValue: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  requestDetailValueAdded: {
-    color: "#5E78B8",
-  },
-  requestYouRow: {
-    backgroundColor: premiumTheme.colors.backgroundSecondary,
-    borderColor: "rgba(30, 23, 23, 0.05)",
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  requestYouLabel: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 10,
-    fontWeight: "800",
-    textTransform: "uppercase",
-  },
-  requestYouBreakdown: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  requestYouPart: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  requestYouPartAdded: {
-    color: "#5E78B8",
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  requestYouTotal: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  requestYouTotalMuted: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  addHistoryBackdrop: {
-    backgroundColor: "rgba(30,23,23,0.4)",
-    flex: 1,
-    justifyContent: "flex-end",
-    padding: 16,
-  },
-  addHistoryButton: {
-    alignItems: "center",
-    backgroundColor: "rgba(94, 120, 184, 0.08)",
-    borderColor: "rgba(94, 120, 184, 0.18)",
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  addHistoryButtonCopy: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-  },
-  addHistoryButtonText: {
-    color: "#5E78B8",
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  addHistoryCard: {
-    backgroundColor: premiumTheme.colors.surfaceElevated,
-    borderRadius: 24,
-    gap: 14,
-    maxHeight: "78%",
-    padding: 20,
-  },
-  addHistoryCloseButton: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.surface,
-    borderRadius: 999,
-    height: 36,
-    justifyContent: "center",
-    width: 36,
-  },
-  addHistoryEyebrow: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-  addHistoryHeader: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 12,
-  },
-  addHistoryHeaderCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  addHistoryItem: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.surface,
-    borderColor: premiumTheme.colors.border,
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between",
-    padding: 12,
-  },
-  addHistoryItemAmount: {
-    color: "#5E78B8",
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 16,
-    fontWeight: "800",
-    textAlign: "right",
-  },
-  addHistoryItemCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  addHistoryItemDate: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-  },
-  addHistoryItemLabel: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  addHistoryItemMeta: {
-    alignItems: "flex-end",
-    gap: 2,
-  },
-  addHistoryItemStatus: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 11,
-    fontWeight: "700",
-    textTransform: "uppercase",
-  },
-  addHistoryItemStatusPending: {
-    color: "#A3485B",
-  },
-  addHistoryList: {
-    gap: 10,
-    paddingRight: 2,
-  },
-  addHistoryListScroll: {
-    maxHeight: 420,
-  },
-  addHistoryEmpty: {
-    paddingHorizontal: 8,
-    paddingVertical: 12,
-  },
-  addHistoryEmptyText: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: "center",
-  },
-  addHistorySubtitle: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 14,
-  },
-  addHistoryTitle: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 24,
-    fontWeight: "800",
-  },
-  requestsSectionHeader: {
-    marginTop: 28,
-  },
-  requestSubtitle: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 12,
-  },
-  requestTitle: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 16,
-    fontWeight: "700",
-    lineHeight: 20,
-  },
-  requestTitleCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  requestTitleWrap: {
-    alignItems: "center",
-    flexDirection: "row",
-    flex: 1,
-    gap: 10,
-  },
-  requestTop: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 10,
-    justifyContent: "space-between",
-  },
-  requestTab: {
-    alignItems: "center",
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0)",
-    flex: 1,
-    justifyContent: "center",
-    paddingVertical: 9,
-  },
-  requestTabSelected: {
-    backgroundColor: premiumTheme.colors.coral,
-    borderColor: "rgba(255, 198, 166, 0.72)",
-  },
-  requestTabs: {
-    backgroundColor: "#ECEEF0",
-    borderColor: "rgba(255, 255, 255, 0.6)",
-    borderRadius: 999,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 4,
-    overflow: "hidden",
-    padding: 4,
-  },
-  requestTabText: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  requestTabTextSelected: {
-    color: premiumTheme.colors.text,
-  },
-  rqstModeTab: {
-    alignItems: "center",
-    backgroundColor: "#ECEEF0",
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0)",
-    flex: 1,
-    flexDirection: "row",
-    gap: 7,
-    justifyContent: "center",
-    minHeight: 42,
-    paddingHorizontal: 12,
-  },
-  rqstModeTabSelected: {
-    backgroundColor: premiumTheme.colors.coral,
-    borderColor: "rgba(255, 198, 166, 0.72)",
-  },
-  rqstModeTabs: {
-    backgroundColor: "#ECEEF0",
-    borderColor: "rgba(255, 255, 255, 0.66)",
-    borderRadius: 999,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 4,
-    overflow: "hidden",
-    padding: 4,
-    zIndex: 1,
-  },
-  rqstModeTabText: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  rqstModeTabTextSelected: {
-    color: premiumTheme.colors.text,
-  },
-  resultSection: {
-    borderBottomColor: premiumTheme.colors.border,
-    borderBottomWidth: 1,
-    paddingBottom: 6,
-  },
-  resultSectionTitle: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 18,
-    fontWeight: "800",
-    paddingHorizontal: 12,
-    paddingTop: 14,
-    paddingBottom: 4,
-  },
-  searchBar: {
-    alignItems: "center",
-    backgroundColor: "#F5F6F7",
-    borderColor: "rgba(255, 255, 255, 0.82)",
-    borderRadius: 26,
-    borderTopColor: "rgba(255, 255, 255, 0.96)",
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    minHeight: 64,
-    overflow: "hidden",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  searchBarShell: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 30,
-    elevation: 12,
-    padding: 3,
-    shadowColor: "#C8D8F1",
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.22,
-    shadowRadius: 28,
-    zIndex: 1,
-  },
-  searchBarShellFocused: {
-    elevation: 16,
-    shadowOpacity: 0.28,
-  },
-  searchBarShellGradient: {
-    borderRadius: 27,
-    overflow: "hidden",
-  },
-  searchIconBadge: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.coral,
-    borderColor: "rgba(255, 255, 255, 0.56)",
-    borderWidth: 1,
-    borderRadius: 19,
-    height: 38,
-    justifyContent: "center",
-    width: 38,
-  },
-  searchInput: {
-    color: premiumTheme.colors.ink,
-    flex: 1,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 17,
-    fontWeight: "700",
-    minHeight: 38,
-  },
-  searchError: {
-    color: premiumTheme.colors.coral,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  searchPane: {
-    gap: 16,
-    minHeight: 500,
-    zIndex: 1,
-  },
-  searchTopSpacer: {
-    flexShrink: 0,
-  },
-  sessionNote: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-  },
-  shoutoutAddButton: {
-    alignItems: "center",
-    alignSelf: "flex-start",
-    backgroundColor: "#2F5FBE",
-    borderColor: "rgba(255, 255, 255, 0.4)",
-    borderRadius: 999,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 5,
-    justifyContent: "center",
-    minHeight: 32,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  shoutoutAddButtonText: {
-    color: "#FFFFFF",
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  shoutoutSupportingText: {
-    color: "#2F5FBE",
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 12,
-    fontWeight: "800",
-    lineHeight: 17,
-  },
-  shoutoutAmountChip: {
-    alignItems: "center",
-    backgroundColor: "rgba(47, 95, 190, 0.08)",
-    borderColor: "rgba(47, 95, 190, 0.18)",
-    borderRadius: 999,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 34,
-    minWidth: 58,
-    paddingHorizontal: 12,
-  },
-  shoutoutAmountChipSelected: {
-    backgroundColor: "#2F5FBE",
-    borderColor: "#2F5FBE",
-  },
-  shoutoutAmountChipText: {
-    color: "#2F5FBE",
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  shoutoutAmountChipTextSelected: {
-    color: "#FFFFFF",
-  },
-  shoutoutAmountInput: {
-    color: "#2F5FBE",
-    flex: 1,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-    fontWeight: "800",
-    paddingVertical: 8,
-  },
-  shoutoutAmountPrefix: {
-    color: "#2F5FBE",
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  shoutoutAmountRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  shoutoutAmountWrap: {
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.72)",
-    borderColor: "rgba(47, 95, 190, 0.18)",
-    borderRadius: 14,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 4,
-    paddingHorizontal: 12,
-  },
-  shoutoutMessageInput: {
-    color: "#2F5FBE",
-    backgroundColor: "rgba(255, 255, 255, 0.72)",
-    borderColor: "rgba(47, 95, 190, 0.16)",
-    borderRadius: 14,
-    borderWidth: 1,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-    fontWeight: "700",
-    minHeight: 74,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    textAlignVertical: "top",
-  },
-  shoutoutPanel: {
-    backgroundColor: "rgba(47, 95, 190, 0.08)",
-    borderColor: "rgba(47, 95, 190, 0.16)",
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 10,
-    padding: 10,
-  },
-  smallButton: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.coral,
-    borderRadius: 999,
-    justifyContent: "center",
-    minWidth: 76,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  smallButtonDisabled: {
-    backgroundColor: "#5C5E6C",
-    borderColor: "transparent",
-  },
-  smallButtonText: {
-    color: premiumTheme.colors.text,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  songArtist: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 12,
-  },
-  songCard: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.surfaceElevated,
-    flexDirection: "row",
-    gap: 10,
-    minHeight: 66,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  songCardSelected: {
-    backgroundColor: "rgba(224, 90, 71, 0.08)",
-  },
-  songCopy: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0,
-  },
-  songImage: {
-    borderRadius: 8,
-    height: 46,
-    width: 46,
-  },
-  songList: {
-    backgroundColor: premiumTheme.colors.surfaceElevated,
-    borderColor: premiumTheme.colors.border,
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-  songResult: {
-    borderRadius: 0,
-  },
-  songStatus: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.backgroundSecondary,
-    borderRadius: 999,
-    height: 32,
-    justifyContent: "center",
-    width: 32,
-  },
-  songStatusSelected: {
-    backgroundColor: premiumTheme.colors.coral,
-  },
-  songTitle: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  topResultCard: {
-    gap: 12,
-    minHeight: 84,
-    paddingBottom: 12,
-    paddingTop: 10,
-  },
-  topResultImage: {
-    borderRadius: 12,
-    height: 60,
-    width: 60,
-  },
-  topResultArtistImage: {
-    borderRadius: 30,
-  },
-  topResultTitle: {
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 19,
-    fontWeight: "800",
-  },
-});

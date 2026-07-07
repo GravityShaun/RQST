@@ -10,7 +10,7 @@ import { router } from "expo-router";
 import { onboardingSlides } from "../../data/onboarding";
 import { pickProfileImage } from "../../lib/avatar-upload";
 import { uploadUserAvatar } from "../../lib/auth-api";
-import { premiumTheme } from "../premium-ui";
+import { usePremiumTheme, useThemedStyles } from "../../store/theme";
 import { useAuthStore } from "../../store/auth";
 import OnboardingFooter from "./OnboardingFooter";
 import OnboardingItem from "./OnboardingItem";
@@ -22,6 +22,28 @@ type Props = {
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<typeof onboardingSlides[number]>);
 
 export default function OnboardingScreen({ email }: Props) {
+  const theme = usePremiumTheme();
+  const styles = useThemedStyles((activeTheme) =>
+    StyleSheet.create({
+      screen: {
+        backgroundColor: activeTheme.colors.background,
+        flex: 1,
+      },
+      list: {
+        flex: 1,
+      },
+      listContent: {
+        flexGrow: 1,
+      },
+      loadingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        alignItems: "center",
+        backgroundColor: "rgba(5,10,18,0.45)",
+        justifyContent: "center",
+        zIndex: 2,
+      },
+    }),
+  );
   const signUp = useAuthStore((state) => state.signUp);
   const setUser = useAuthStore((state) => state.setUser);
   const { width: screenWidth } = useWindowDimensions();
@@ -158,15 +180,17 @@ export default function OnboardingScreen({ email }: Props) {
     <View style={styles.screen}>
       {isSubmitting || isPickingAvatar ? (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator color={premiumTheme.colors.coral} size="large" />
+          <ActivityIndicator color={theme.colors.coral} size="large" />
         </View>
       ) : null}
 
       <AnimatedFlatList
         ref={flatListRef}
+        contentContainerStyle={styles.listContent}
         data={onboardingSlides}
         horizontal
         keyExtractor={(item) => item.id}
+        style={styles.list}
         onMomentumScrollEnd={(event) => updateCurrentIndex(event.nativeEvent.contentOffset.x)}
         onScroll={onScroll}
         onScrollEndDrag={(event) => updateCurrentIndex(event.nativeEvent.contentOffset.x)}
@@ -215,16 +239,3 @@ export default function OnboardingScreen({ email }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: {
-    backgroundColor: premiumTheme.colors.background,
-    flex: 1,
-  },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    backgroundColor: "rgba(30,23,23,0.24)",
-    justifyContent: "center",
-    zIndex: 2,
-  },
-});

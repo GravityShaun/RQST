@@ -3,9 +3,10 @@ import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput,
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Link } from "expo-router";
+import { usePremiumTheme, useThemedStyles } from "../../store/theme";
 
 import { GrainyGradientBackground } from "../../components/grainy-gradient/GrainyGradient";
-import { SurfaceCard, premiumTheme } from "../../components/premium-ui";
+import { SurfaceCard } from "../../components/premium-ui";
 
 type AuthFormFieldProps = {
   label: string;
@@ -19,6 +20,141 @@ type AuthFormFieldProps = {
   textContentType?: "emailAddress" | "password" | "name" | "newPassword" | "none";
 };
 
+
+function useAuthStyles() {
+  return useThemedStyles((activeTheme) =>
+    StyleSheet.create({
+brandMark: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.coral,
+    borderColor: "rgba(255,255,255,0.24)",
+    borderRadius: 16,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  brandRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+  },
+  brandText: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 28,
+    fontWeight: "800",
+  },
+  card: {
+    gap: 18,
+    padding: 22,
+  },
+  content: {
+    flex: 1,
+    gap: 24,
+    paddingHorizontal: 20,
+  },
+  eyebrow: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+  },
+  fieldError: {
+    color: activeTheme.colors.coral,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    marginTop: 6,
+  },
+  fieldInput: {
+    backgroundColor: activeTheme.colors.surfaceElevated,
+    borderColor: activeTheme.colors.border,
+    borderRadius: activeTheme.radii.sm,
+    borderWidth: 1,
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  fieldInputError: {
+    borderColor: "rgba(224, 90, 71, 0.45)",
+  },
+  fieldLabel: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  fieldWrap: {
+    gap: 0,
+  },
+  footerLink: {
+    color: activeTheme.colors.coral,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  footerPrompt: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 15,
+  },
+  footerRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "center",
+    marginTop: 4,
+  },
+  heroCopy: {
+    gap: 8,
+  },
+  screen: {
+    backgroundColor: activeTheme.colors.background,
+    flex: 1,
+  },
+  submitButton: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.coral,
+    borderColor: "rgba(255,255,255,0.18)",
+    borderRadius: activeTheme.radii.xl,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    marginTop: 4,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  submitButtonDisabled: {
+    opacity: 0.55,
+  },
+  submitButtonText: {
+    color: activeTheme.colors.text,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  subtitle: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 16,
+    lineHeight: 22,
+    maxWidth: 320,
+  },
+  title: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 34,
+    fontWeight: "800",
+    lineHeight: 38,
+  },
+    }),
+  );
+}
 export function AuthFormField({
   label,
   value,
@@ -30,6 +166,9 @@ export function AuthFormField({
   secureTextEntry = false,
   textContentType = "none",
 }: AuthFormFieldProps) {
+  const theme = usePremiumTheme();
+  const styles = useAuthStyles();
+
   return (
     <View style={styles.fieldWrap}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -40,7 +179,7 @@ export function AuthFormField({
         keyboardType={keyboardType}
         onChangeText={onChangeText}
         placeholder={label}
-        placeholderTextColor={premiumTheme.colors.inkMuted}
+        placeholderTextColor={theme.colors.inkMuted}
         secureTextEntry={secureTextEntry}
         style={[styles.fieldInput, error ? styles.fieldInputError : null]}
         textContentType={textContentType}
@@ -61,6 +200,8 @@ export function AuthScreenShell({
   title: string;
   subtitle: string;
 }>) {
+  const theme = usePremiumTheme();
+  const styles = useAuthStyles();
   const insets = useSafeAreaInsets();
 
   return (
@@ -77,7 +218,7 @@ export function AuthScreenShell({
       >
         <View style={styles.brandRow}>
           <View style={styles.brandMark}>
-            <Ionicons color={premiumTheme.colors.text} name="musical-notes" size={22} />
+            <Ionicons color={theme.colors.text} name="musical-notes" size={22} />
           </View>
           <Text style={styles.brandText}>RQST</Text>
         </View>
@@ -113,7 +254,7 @@ export function AuthSubmitButton({
       style={[styles.submitButton, (disabled || loading) && styles.submitButtonDisabled]}
     >
       <Text style={styles.submitButtonText}>{loading ? "Please wait..." : label}</Text>
-      <Ionicons color={premiumTheme.colors.text} name="arrow-forward" size={18} />
+      <Ionicons color={theme.colors.text} name="arrow-forward" size={18} />
     </Pressable>
   );
 }
@@ -136,134 +277,3 @@ export function AuthFooterLink({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  brandMark: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.coral,
-    borderColor: "rgba(255,255,255,0.24)",
-    borderRadius: 16,
-    borderWidth: 1,
-    height: 44,
-    justifyContent: "center",
-    width: 44,
-  },
-  brandRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-  },
-  brandText: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 28,
-    fontWeight: "800",
-  },
-  card: {
-    gap: 18,
-    padding: 22,
-  },
-  content: {
-    flex: 1,
-    gap: 24,
-    paddingHorizontal: 20,
-  },
-  eyebrow: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-  },
-  fieldError: {
-    color: premiumTheme.colors.coral,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-    marginTop: 6,
-  },
-  fieldInput: {
-    backgroundColor: premiumTheme.colors.surfaceElevated,
-    borderColor: premiumTheme.colors.border,
-    borderRadius: premiumTheme.radii.sm,
-    borderWidth: 1,
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  fieldInputError: {
-    borderColor: "rgba(224, 90, 71, 0.45)",
-  },
-  fieldLabel: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  fieldWrap: {
-    gap: 0,
-  },
-  footerLink: {
-    color: premiumTheme.colors.coral,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  footerPrompt: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 15,
-  },
-  footerRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 6,
-    justifyContent: "center",
-    marginTop: 4,
-  },
-  heroCopy: {
-    gap: 8,
-  },
-  screen: {
-    backgroundColor: premiumTheme.colors.background,
-    flex: 1,
-  },
-  submitButton: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.coral,
-    borderColor: "rgba(255,255,255,0.18)",
-    borderRadius: premiumTheme.radii.xl,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "center",
-    marginTop: 4,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  submitButtonDisabled: {
-    opacity: 0.55,
-  },
-  submitButtonText: {
-    color: premiumTheme.colors.text,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 17,
-    fontWeight: "700",
-  },
-  subtitle: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 16,
-    lineHeight: 22,
-    maxWidth: 320,
-  },
-  title: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 34,
-    fontWeight: "800",
-    lineHeight: 38,
-  },
-});

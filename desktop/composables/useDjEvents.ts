@@ -6,6 +6,8 @@ import {
 } from "@rqst/contracts";
 
 import { useDjAuth } from "~/composables/useDjAuth";
+import { authenticatedJsonFetch } from "~/lib/authenticated-fetch";
+import { computeShowEndIso, DEFAULT_SHOW_DURATION_MINUTES } from "~/utils/shows";
 
 export type VenueFormInput = {
   name: string;
@@ -23,46 +25,13 @@ export type EventFormInput = {
   name: string;
   description: string;
   startsAt: string;
-  endsAt: string;
+  durationMinutes: number;
   ticketUrl: string;
   venue: VenueFormInput;
 };
 
-type ApiErrorBody = {
-  detail?: string | { msg?: string }[];
-};
-
 function routePath(route: string) {
   return route.replace("/api/v1", "");
-}
-
-function toCamelCase(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(toCamelCase);
-  }
-
-  if (!value || typeof value !== "object") {
-    return value;
-  }
-
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [
-      key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()),
-      toCamelCase(item),
-    ]),
-  );
-}
-
-function parseApiError(status: number, body: ApiErrorBody): string {
-  if (typeof body.detail === "string") {
-    return body.detail;
-  }
-
-  if (Array.isArray(body.detail) && body.detail[0]?.msg) {
-    return body.detail[0].msg;
-  }
-
-  return `Request failed with status ${status}.`;
 }
 
 export function resolveAssetUrl(apiBaseUrl: string, assetUrl?: string | null): string | null {
@@ -97,7 +66,7 @@ export function emptyEventForm(): EventFormInput {
     name: "",
     description: "",
     startsAt: "",
-    endsAt: "",
+    durationMinutes: DEFAULT_SHOW_DURATION_MINUTES,
     ticketUrl: "",
     venue: emptyVenueForm(),
   };
@@ -107,7 +76,7 @@ export function useDjEvents() {
   const config = useRuntimeConfig();
   const { ensureAuth } = useDjAuth();
 
-  const events = ref<DjEvent[]>([]);
+  const events = useState<DjEvent[]>("dj-events", () => []);
   const pending = ref(true);
   const saving = ref(false);
   const uploadingFlyer = ref(false);
@@ -117,43 +86,21 @@ export function useDjEvents() {
   const saveMessage = ref("");
 
   async function authFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const accessToken = await ensureAuth();
-    const headers = new Headers(init.headers);
-    headers.set("Accept", "application/json");
-
-    if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
-      headers.set("Content-Type", "application/json");
-    }
-
-    headers.set("Authorization", `Bearer ${accessToken}`);
-
-    const response = await fetch(`${config.public.apiBaseUrl}${path}`, {
-      ...init,
-      headers,
-    });
-
-    if (!response.ok) {
-      let message = `Request failed with status ${response.status}.`;
-
-      try {
-        const body = (await response.json()) as ApiErrorBody;
-        message = parseApiError(response.status, body);
-      } catch {
-        message = parseApiError(response.status, {});
-      }
-
-      throw new Error(message);
-    }
-
-    if (response.status === 204) {
-      return undefined as T;
-    }
-
-    return toCamelCase(await response.json()) as T;
+    return authenticatedJsonFetch<T>(config.public.apiBaseUrl, path, init);
   }
 
   async function loadEvents() {
     events.value = await authFetch<DjEvent[]>(routePath(apiRoutes.djEvents));
+  }
+
+  function upsertEvent(updated: DjEvent) {
+    const nextEvents = events.value.some((event) => event.id === updated.id)
+      ? events.value.map((event) => (event.id === updated.id ? updated : event))
+      : [...events.value, updated];
+
+    events.value = nextEvents.sort(
+      (left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
+    );
   }
 
   async function refresh() {
@@ -210,10 +157,10 @@ export function useDjEvents() {
 
   function buildEventBody(payload: EventFormInput) {
     const body: Record<string, unknown> = {
-      name: payload.name.trim(),
+      name: payload.name.trim() || null,
       description: payload.description.trim() || null,
       starts_at: payload.startsAt,
-      ends_at: payload.endsAt || null,
+      ends_at: computeShowEndIso(payload.startsAt, payload.durationMinutes),
       ticket_url: payload.ticketUrl.trim() || null,
     };
 
@@ -227,36 +174,19 @@ export function useDjEvents() {
   }
 
   async function uploadFlyerFile(eventId: number, file: File): Promise<DjEvent> {
-    const accessToken = await ensureAuth();
+    await ensureAuth();
     const formData = new FormData();
     formData.append("file", file);
 
-    const response = await fetch(
-      `${config.public.apiBaseUrl}${routePath(apiRouteBuilders.djEventFlyer(eventId))}`,
+    const updated = await authenticatedJsonFetch<DjEvent>(
+      config.public.apiBaseUrl,
+      routePath(apiRouteBuilders.djEventFlyer(eventId)),
       {
         method: "POST",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
         body: formData,
       },
     );
 
-    if (!response.ok) {
-      let message = `Request failed with status ${response.status}.`;
-
-      try {
-        const body = (await response.json()) as ApiErrorBody;
-        message = parseApiError(response.status, body);
-      } catch {
-        message = parseApiError(response.status, {});
-      }
-
-      throw new Error(message);
-    }
-
-    const updated = toCamelCase(await response.json()) as DjEvent;
     events.value = events.value.map((event) => (event.id === updated.id ? updated : event));
     return updated;
   }
@@ -281,6 +211,7 @@ export function useDjEvents() {
         (left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
       );
       saveMessage.value = flyerFile ? "Show created with flyer." : "Show saved.";
+      void useLiveShow().refresh();
       return result;
     } catch (saveError) {
       error.value = saveError instanceof Error ? saveError.message : "Could not save show.";
@@ -309,6 +240,7 @@ export function useDjEvents() {
         .map((event) => (event.id === result.id ? result : event))
         .sort((left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime());
       saveMessage.value = flyerFile ? "Show updated with flyer." : "Show updated.";
+      void useLiveShow().refresh();
       return result;
     } catch (saveError) {
       error.value = saveError instanceof Error ? saveError.message : "Could not update show.";
@@ -329,6 +261,7 @@ export function useDjEvents() {
       });
       events.value = events.value.filter((event) => event.id !== eventId);
       saveMessage.value = "Show removed.";
+      void useLiveShow().refresh();
     } catch (deleteError) {
       error.value = deleteError instanceof Error ? deleteError.message : "Could not delete show.";
       throw deleteError;
@@ -372,6 +305,7 @@ export function useDjEvents() {
     updateEvent,
     deleteEvent,
     uploadFlyer,
+    upsertEvent,
     resolveAssetUrl: (assetUrl?: string | null) => resolveAssetUrl(config.public.apiBaseUrl, assetUrl),
   };
 }

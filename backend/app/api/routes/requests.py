@@ -10,20 +10,24 @@ from app.models import (
     DJProfile,
     DJSession,
     RequestStatus,
+    SessionStatus,
     Song,
     SongRequest,
     User,
     UserRole,
 )
-from app.repositories.requests import build_request_read, build_request_reads, get_session_queue
+from app.repositories.requests import build_request_read, build_request_reads, find_active_song_request, get_session_queue
 from app.realtime.queue import schedule_session_queue_broadcast
 from app.schemas.common import MessageResponse
 from app.schemas.requests import ContributionCreate, RequestCreate, RequestRead
 from app.services.dj_sessions import get_active_dj_session
+from app.services.earnings import credit_ledger_for_played_request, reverse_ledger_for_request
+from app.services.event_sessions import resolve_event_id_for_session
 from app.services.payments import create_payment, maybe_auto_complete_payment
 from app.services.queue import (
     assert_request_undo_allowed,
     cancel_contribution,
+    cancel_mismatched_open_requests,
     confirm_request,
     delete_song_request,
     mark_request_played,
@@ -33,14 +37,25 @@ router = APIRouter(tags=["requests"])
 dj_router = APIRouter(prefix="/dj/requests", tags=["dj-requests"])
 
 
+def _get_live_session_or_none(db: DBSession, session_id: int) -> DJSession | None:
+    session = db.get(DJSession, session_id)
+    if not session or session.status != SessionStatus.LIVE:
+        return None
+    return session
+
+
 @router.get("/sessions/{session_id}/queue", response_model=list[RequestRead])
 def get_queue(session_id: int, db: DBSession) -> list[RequestRead]:
+    if _get_live_session_or_none(db, session_id) is None:
+        return []
     queue = get_session_queue(db, session_id)
     return build_request_reads(db, queue)
 
 
 @router.get("/sessions/{session_id}/requests", response_model=list[RequestRead])
 def get_session_requests(session_id: int, db: DBSession) -> list[RequestRead]:
+    if _get_live_session_or_none(db, session_id) is None:
+        return []
     queue = get_session_queue(db, session_id)
     return build_request_reads(db, queue)
 
@@ -53,7 +68,11 @@ def create_request(
     user: Annotated[User, Depends(get_current_user)],
 ) -> RequestRead:
     session = db.get(DJSession, session_id)
-    if not session or not session.accepting_requests:
+    if (
+        not session
+        or session.status != SessionStatus.LIVE
+        or not session.accepting_requests
+    ):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Session not accepting requests")
     if payload.amount_cents < session.minimum_request_amount_cents:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Below minimum request amount")
@@ -62,15 +81,16 @@ def create_request(
     if not song:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Song metadata is required")
 
-    existing = db.scalar(
-        select(SongRequest).where(SongRequest.session_id == session_id, SongRequest.song_id == song.id)
-    )
+    event_id = resolve_event_id_for_session(db, session)
+    cancel_mismatched_open_requests(db, session)
+    existing = find_active_song_request(db, session, song.id)
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Song already exists in queue; contribute instead")
 
     profile = db.get(DJProfile, session.dj_profile_id)
     request = SongRequest(
         session_id=session_id,
+        event_id=event_id,
         song_id=song.id,
         requested_by_user_id=user.id,
         status=RequestStatus.PENDING_PAYMENT,
@@ -301,6 +321,7 @@ def mark_played(
     if not request:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
     mark_request_played(request)
+    credit_ledger_for_played_request(db, request.id)
     db.commit()
     schedule_session_queue_broadcast(request.session_id)
     return MessageResponse(message="Request marked played")
@@ -316,6 +337,7 @@ def reject_request(
     if not request:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
     request.status = RequestStatus.REJECTED
+    reverse_ledger_for_request(db, request.id)
     db.commit()
     schedule_session_queue_broadcast(request.session_id)
     return MessageResponse(message="Request rejected")

@@ -54,6 +54,48 @@
     <section class="card settings-section">
       <div class="settings-section-header">
         <div>
+          <div class="eyebrow">Appearance</div>
+          <div class="section-title">Color theme</div>
+        </div>
+      </div>
+
+      <div class="settings-appearance-copy">
+        <p class="muted" style="margin: 0">
+          Choose light or dark mode, or match your device settings automatically.
+        </p>
+      </div>
+
+      <div class="segment-tabs cols-3" role="group" aria-label="Color theme">
+        <button
+          class="segment-tab"
+          :class="{ 'is-selected': settings.colorScheme === 'system' }"
+          type="button"
+          @click="settings.colorScheme = 'system'"
+        >
+          System
+        </button>
+        <button
+          class="segment-tab"
+          :class="{ 'is-selected': settings.colorScheme === 'light' }"
+          type="button"
+          @click="settings.colorScheme = 'light'"
+        >
+          Light
+        </button>
+        <button
+          class="segment-tab"
+          :class="{ 'is-selected': settings.colorScheme === 'dark' }"
+          type="button"
+          @click="settings.colorScheme = 'dark'"
+        >
+          Dark
+        </button>
+      </div>
+    </section>
+
+    <section class="card settings-section">
+      <div class="settings-section-header">
+        <div>
           <div class="eyebrow">Preferences</div>
           <div class="section-title">Session alerts</div>
         </div>
@@ -364,5 +406,9 @@ async function handleLogout() {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.82rem;
   word-break: break-all;
+}
+
+.settings-appearance-copy {
+  margin-bottom: 4px;
 }
 </style>

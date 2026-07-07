@@ -1,7 +1,10 @@
+import type { ColorSchemeMode } from "@rqst/shared-config";
+
 export type DesktopSettings = {
   soundAlerts: boolean;
   desktopNotifications: boolean;
   confirmBeforePlay: boolean;
+  colorScheme: ColorSchemeMode;
 };
 
 const STORAGE_KEY = "rqst-desktop-settings";
@@ -10,6 +13,7 @@ const DEFAULTS: DesktopSettings = {
   soundAlerts: true,
   desktopNotifications: true,
   confirmBeforePlay: true,
+  colorScheme: "system",
 };
 
 export function loadDesktopSettings(): DesktopSettings {

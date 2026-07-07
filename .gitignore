@@ -1,41 +1,79 @@
+# OS
 .DS_Store
-node_modules
-.pnpm-store
-.expo
-.expo-shared
-.nuxt
-.output
-dist
-build
-coverage
-__pycache__
-.pytest_cache
-.ruff_cache
-.mypy_cache
-.venv
-venv
-*.pyc
+Thumbs.db
+
+# Dependencies
+node_modules/
+.pnpm-store/
+bun.lockb
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+.secrets/
+AuthKey_*.p8
+*.p8
+
+# Python
+__pycache__/
+*.py[cod]
 *.pyo
 *.pyd
-*.sqlite3
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+
+# Databases (local dev only)
 *.db
-Backend/alembic.ini
-Backend/.env
-Backend/.env.*
-Backend/.secrets/
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# Nuxt / frontend build output
+.nuxt/
+.output/
+dist/
+coverage/
+
+# Expo / React Native
+.expo/
+.expo-shared/
+expo-env.d.ts
+
+# Tauri / Rust (all apps)
+**/src-tauri/target/
+**/src-tauri/gen/
+
+# Backend (local dev)
 backend/.env
 backend/.env.*
 backend/.secrets/
 backend/uploads/
-AuthKey_*.p8
-*.p8
-Mobile/.env
-Mobile/.env.*
-Desktop/.env
-Desktop/.env.*
-Desktop/src-tauri/target
+backend/alembic.ini
+
+# Desktop app
 desktop/.env
 desktop/.env.*
-desktop/src-tauri/target
-desktop/src-tauri/gen
-desktop/src-tauri/target/
+
+# Admin dashboard
+admin_dashboard/.env
+admin_dashboard/.env.*
+
+# Mobile app
+mobile/.env
+mobile/.env.*
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

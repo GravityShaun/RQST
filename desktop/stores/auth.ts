@@ -118,5 +118,22 @@ export const useAuthStore = defineStore("auth", {
       this.user = null;
       this.status = "unauthenticated";
     },
+
+    async refreshSession() {
+      if (!this.refreshToken) {
+        return false;
+      }
+
+      const config = useRuntimeConfig();
+
+      try {
+        const refreshed = await refreshAuthTokens(config.public.apiBaseUrl, this.refreshToken);
+        await this.applyTokens(refreshed);
+        return true;
+      } catch {
+        await this.signOut();
+        return false;
+      }
+    },
   },
 });

@@ -6,6 +6,7 @@ from app.models import (
     ContributionStatus,
     DJProfile,
     DJSession,
+    Event,
     Payment,
     RequestStatus,
     Song,
@@ -13,7 +14,7 @@ from app.models import (
     User,
     Venue,
 )
-from app.services.queue import INACTIVE_QUEUE_STATUSES
+from app.services.queue import INACTIVE_QUEUE_STATUSES, QUEUE_INACTIVE_STATUSES
 from app.schemas.requests import RequestContributorRead, RequestRead
 
 VISIBLE_CONTRIBUTION_STATUSES = {
@@ -118,12 +119,20 @@ def _compute_contribution_amounts(
 
 
 def get_session_queue(db: Session, session_id: int) -> list[SongRequest]:
+    session = db.get(DJSession, session_id)
+    if session is None:
+        return []
+
+    filters = [
+        SongRequest.session_id == session_id,
+        SongRequest.status.not_in(QUEUE_INACTIVE_STATUSES),
+    ]
+    if session.event_id is not None:
+        filters.append(SongRequest.event_id == session.event_id)
+
     stmt = (
         select(SongRequest)
-        .where(
-            SongRequest.session_id == session_id,
-            SongRequest.status.not_in(INACTIVE_QUEUE_STATUSES),
-        )
+        .where(*filters)
         .order_by(
             SongRequest.total_amount_cents.desc(),
             SongRequest.created_at.asc(),
@@ -131,6 +140,18 @@ def get_session_queue(db: Session, session_id: int) -> list[SongRequest]:
         )
     )
     return list(db.scalars(stmt))
+
+
+def find_active_song_request(db: Session, session: DJSession, song_id: int) -> SongRequest | None:
+    filters = [
+        SongRequest.session_id == session.id,
+        SongRequest.song_id == song_id,
+        SongRequest.status.not_in(QUEUE_INACTIVE_STATUSES),
+    ]
+    if session.event_id is not None:
+        filters.append(SongRequest.event_id == session.event_id)
+
+    return db.scalar(select(SongRequest).where(*filters))
 
 
 def build_request_read(
@@ -143,6 +164,8 @@ def build_request_read(
     session = db.get(DJSession, request.session_id)
     profile = db.get(DJProfile, session.dj_profile_id) if session else None
     venue = db.get(Venue, session.venue_id) if session else None
+    event_id = request.event_id or (session.event_id if session else None)
+    event = db.get(Event, event_id) if event_id else None
     requester = db.get(User, request.requested_by_user_id)
     contributions = list(
         db.scalars(
@@ -217,7 +240,8 @@ def build_request_read(
         dj_artist_name=profile.artist_name if profile else None,
         venue_id=venue.id if venue else None,
         venue_name=venue.name if venue else None,
-        event_id=session.event_id if session else None,
+        event_id=event_id,
+        event_name=event.name if event else None,
         requester_display_name=requester.display_name if requester else None,
         requester_avatar_url=requester.avatar_url if requester else None,
         my_contribution_cents=contribution_amounts["my_contribution_cents"],

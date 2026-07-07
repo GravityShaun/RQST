@@ -5,7 +5,10 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: "RQST DJ Console",
-      meta: [{ name: "viewport", content: "width=device-width, initial-scale=1" }],
+      meta: [
+        { name: "viewport", content: "width=device-width, initial-scale=1" },
+        { name: "theme-color", content: "#e8eaec" },
+      ],
     },
   },
   runtimeConfig: {

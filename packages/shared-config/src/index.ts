@@ -28,14 +28,16 @@ export const paymentStatuses = {
   payment_disputed: "Disputed",
 } as const;
 
+export type ColorSchemeMode = "light" | "dark" | "system";
+
 export const theme = {
   colors: {
-    background: "#09070B",
-    surface: "#16111A",
-    elevated: "#231A29",
-    border: "#34273C",
-    text: "#F8F1FF",
-    muted: "#BDAFCA",
+    background: "#0B1118",
+    surface: "#152030",
+    elevated: "#1C2A3D",
+    border: "#243247",
+    text: "#F0F6FC",
+    muted: "#BAC6E6",
     accent: "#FF5D5D",
     accentAlt: "#5EF2FF",
     success: "#5CE1A5",

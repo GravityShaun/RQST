@@ -7,11 +7,12 @@ import { apiRouteBuilders, apiRoutes, type SongRequestSummary } from "@rqst/cont
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsFocused, useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
+import { usePremiumTheme, useResolvedColorScheme, useThemedStyles } from "../../src/store/theme";
 
-import { ScreenShell, SectionTitle, SurfaceCard, Tag, premiumTheme } from "../../src/components/premium-ui";
+import { ScreenShell, SectionTitle, SurfaceCard, Tag } from "../../src/components/premium-ui";
 import { RequestCancelAction } from "../../src/components/RequestCancelAction";
 import { DirectorySearch } from "../../src/features/discover/DirectorySearch";
-import { liveQueue, type QueueItem, type RequesterContribution } from "../../src/features/rqst/mock-data";
+import { type QueueItem, type RequesterContribution } from "../../src/features/rqst/mock-data";
 import { rqstApi, type ContributionCreatePayload } from "../../src/lib/rqst-api";
 import { isActiveQueueStatus } from "../../src/lib/SessionQueueSync";
 import { canCancelRequest, getPendingCancelExpiresAt } from "../../src/lib/request-cancel";
@@ -19,12 +20,21 @@ import { useRequestCancel } from "../../src/lib/use-request-cancel";
 import { useActiveSession } from "../../src/lib/use-active-session";
 import { useAuthStore } from "../../src/store/auth";
 import { usePendingCancelStore } from "../../src/store/pending-cancel";
-import { useAppStore } from "../../src/store/app";
 import { resolveAvatarUrl } from "../../src/lib/avatar";
 import { unsplashImages } from "../../src/lib/unsplash";
 
 const quickAmounts = [5, 10, 15, 20, 25, 50];
 const listRefreshIntervalMs = 30_000;
+
+const djGradientColors = {
+  light: ["#FFD2C8", "#F4B8CF", "#E8D9FF"] as const,
+  dark: ["#E05A47", "#D97BAE", "#8B6DD6"] as const,
+};
+
+const venueGradientColors = {
+  light: ["#A8D4FF", "#7AB8A8", "#D9F3F0"] as const,
+  dark: ["#6B9FD4", "#7AB8A8", "#5E78B8"] as const,
+};
 
 function resolveRequesterImageUri(avatarUrl?: string | null): string {
   return resolveAvatarUrl(avatarUrl) ?? unsplashImages.djPortrait;
@@ -101,11 +111,497 @@ function mapBackendQueueItem(request: SongRequestSummary, index: number): QueueI
 }
 
 export default function ListScreen() {
+  const theme = usePremiumTheme();
+  const resolvedScheme = useResolvedColorScheme();
+  const styles = useThemedStyles((activeTheme) =>
+    StyleSheet.create({
+actionColumn: {
+    alignItems: "flex-end",
+    width: 30,
+  },
+  amountOption: {
+    backgroundColor: activeTheme.colors.surface,
+    borderColor: activeTheme.colors.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  amountOptionSelected: {
+    backgroundColor: "#EAF2FF",
+    borderColor: "#6A95FF",
+  },
+  amountOptionText: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  amountOptionTextSelected: {
+    color: "#2457D6",
+  },
+  amountSelector: {
+    maxHeight: 280,
+  },
+  amountSelectorContent: {
+    gap: 10,
+    paddingRight: 4,
+  },
+  arrowButton: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.surfaceElevated,
+    borderColor: "#D98A84",
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: "center",
+    width: 28,
+  },
+  arrowButtonDisabled: {
+    opacity: 0.4,
+  },
+  circleButton: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.surfaceElevated,
+    borderColor: activeTheme.colors.border,
+    borderRadius: 24,
+    borderWidth: 1,
+    height: 48,
+    justifyContent: "center",
+    shadowColor: "#5B6474",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    width: 48,
+  },
+  circleButtonLight: {
+    backgroundColor: "#D94E3D",
+  },
+  circleButtonActive: {
+    backgroundColor: activeTheme.colors.surfaceElevated,
+    borderColor: "#E2AAB1",
+  },
+  customAmountInput: {
+    backgroundColor: activeTheme.colors.surface,
+    borderColor: activeTheme.colors.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  customAmountLabel: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  customAmountWrap: {
+    gap: 8,
+    paddingTop: 8,
+  },
+  contentInset: {
+    paddingHorizontal: 20,
+  },
+  contributionError: {
+    color: "#B42318",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    textAlign: "center",
+  },
+  emptyRow: {
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+  },
+  emptySubtitle: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    textAlign: "center",
+  },
+  emptyTitle: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  identityEyebrow: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  identityPanel: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  identitySection: {
+    gap: 0,
+  },
+  identityPillBorder: {
+    borderRadius: 999,
+    overflow: "hidden",
+    padding: 1.5,
+  },
+  identityPillDj: {
+    flex: 0.65,
+  },
+  identityPillInner: {
+    backgroundColor: activeTheme.colors.surfaceElevated,
+    borderRadius: 999,
+    gap: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  identityPillVenue: {
+    flex: 0.35,
+  },
+  identityValue: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  showSubtitle: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 11,
+    fontWeight: "500",
+    paddingHorizontal: 4,
+    paddingTop: 10,
+  },
+  pickRoomButton: {
+    alignItems: "center",
+    backgroundColor: "#D94E3D",
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  pickRoomButtonText: {
+    color: "#FFFFFF",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  pickRoomCard: {
+    marginTop: 8,
+  },
+  modalBackdrop: {
+    backgroundColor: "rgba(30,23,23,0.4)",
+    flex: 1,
+    justifyContent: "flex-end",
+    padding: 16,
+  },
+  modalCard: {
+    backgroundColor: activeTheme.colors.surfaceElevated,
+    borderRadius: 24,
+    gap: 14,
+    maxHeight: "88%",
+    padding: 20,
+  },
+  modalCloseButton: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.surface,
+    borderRadius: 999,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  modalCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  modalCta: {
+    alignItems: "center",
+    backgroundColor: "#D94E3D",
+    borderRadius: 999,
+    justifyContent: "center",
+    paddingVertical: 16,
+  },
+  modalCtaDisabled: {
+    opacity: 0.45,
+  },
+  modalCtaText: {
+    color: activeTheme.colors.text,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  modalEyebrow: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  modalHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 12,
+  },
+  modalSubtitle: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 14,
+  },
+  modalTitle: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 24,
+    fontWeight: "800",
+  },
+  priceColumn: {
+    alignItems: "flex-end",
+    textAlign: "right",
+    width: 54,
+  },
+  requesterAvatar: {
+    backgroundColor: "#E8D9FF",
+    borderColor: "#FFFFFF",
+    borderRadius: 17,
+    borderWidth: 2,
+    height: 34,
+    overflow: "hidden",
+    width: 34,
+  },
+  requesterList: {
+    gap: 10,
+    paddingRight: 2,
+  },
+  requesterListAvatar: {
+    borderRadius: 22,
+    height: 44,
+    width: 44,
+  },
+  requesterListAmount: {
+    color: "#5E78B8",
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 15,
+    fontWeight: "800",
+    textAlign: "right",
+  },
+  requesterListCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  requesterListHandle: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+  },
+  requesterListItem: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.surface,
+    borderColor: activeTheme.colors.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    padding: 12,
+  },
+  requesterListName: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  requesterListScroll: {
+    maxHeight: 480,
+  },
+  requesterSortControl: {
+    alignSelf: "flex-start",
+    backgroundColor: activeTheme.colors.surface,
+    borderColor: activeTheme.colors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    padding: 3,
+  },
+  requesterSortOption: {
+    alignItems: "center",
+    borderRadius: 9,
+    flexDirection: "row",
+    gap: 3,
+    justifyContent: "center",
+    minWidth: 82,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  requesterSortOptionActive: {
+    backgroundColor: activeTheme.colors.surfaceElevated,
+    shadowColor: activeTheme.colors.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+  },
+  requesterSortText: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  requesterSortTextActive: {
+    color: "#A3485B",
+  },
+  screenContent: {
+    flexGrow: 1,
+    paddingBottom: 0,
+    paddingHorizontal: 0,
+  },
+  songArtist: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  songColumn: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 4,
+  },
+  songTitle: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 16,
+    fontWeight: "700",
+    lineHeight: 19,
+  },
+  rqstsCell: {
+    color: "#A3485B",
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 14,
+    fontWeight: "800",
+    minWidth: 14,
+  },
+  rqstsButton: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "flex-start",
+    width: 72,
+  },
+  rqstsColumn: {
+    alignItems: "flex-start",
+    textAlign: "left",
+    width: 72,
+  },
+  searchClearButton: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.surface,
+    borderRadius: 999,
+    height: 30,
+    justifyContent: "center",
+    width: 30,
+  },
+  searchInput: {
+    color: activeTheme.colors.ink,
+    flex: 1,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 15,
+    minWidth: 0,
+    paddingVertical: 0,
+  },
+  searchPanel: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.surfaceElevated,
+    borderColor: activeTheme.colors.border,
+    borderRadius: 22,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: "#5B6474",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+  },
+  sortHeaderButton: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 2,
+    justifyContent: "flex-end",
+  },
+  sortHeaderButtonLeft: {
+    justifyContent: "flex-start",
+  },
+  supportCell: {
+    color: "#5E78B8",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  table: {
+    flexGrow: 1,
+    width: "100%",
+  },
+  tableBodyDivider: {
+    borderBottomColor: activeTheme.colors.border,
+    borderBottomWidth: 1,
+  },
+  tableCard: {
+    borderRadius: 22,
+    flexGrow: 1,
+    overflow: "hidden",
+    padding: 0,
+    shadowOpacity: 0.04,
+  },
+  tableCell: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 14,
+  },
+  tableHeaderCell: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  tableHeaderCellActive: {
+    color: "#C95A52",
+  },
+  tableHeaderRow: {
+    backgroundColor: "rgba(30,23,23,0.06)",
+  },
+  tableRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+  },
+  topBar: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  topBarLeft: {
+    flexDirection: "row",
+    gap: 12,
+  },
+    }),
+  );
+
   const queryClient = useQueryClient();
   const navigation = useNavigation();
   const isScreenFocused = useIsFocused();
-  const localQueueRequests = useAppStore((state) => state.localQueueRequests);
-  const { sessionId, djName, venueName, djSlug, hasSession } = useActiveSession({ requireSelection: true });
+  const { sessionId, djName, venueName, djSlug, hasSession, isSessionLive, showLabel, activeEventId } = useActiveSession({
+    requireSelection: true,
+  });
   const isSignedIn = useAuthStore((state) => state.status === "authenticated" && Boolean(state.accessToken));
   const currentUserId = useAuthStore((state) => state.user?.id ?? null);
   const { cancelRequest } = useRequestCancel();
@@ -116,7 +612,6 @@ export default function ListScreen() {
   const [selectedRequesterSongId, setSelectedRequesterSongId] = useState<string | null>(null);
   const [selectedAmount, setSelectedAmount] = useState("10");
   const [customAmount, setCustomAmount] = useState("");
-  const [localQueue, setLocalQueue] = useState(liveQueue);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("price");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -131,6 +626,8 @@ export default function ListScreen() {
       }),
     enabled: sessionId != null,
     retry: false,
+    staleTime: 0,
+    gcTime: 0,
   });
   const contributeMutation = useMutation({
     mutationFn: ({ requestId, amountCents }: { requestId: string; amountCents: number }) =>
@@ -156,17 +653,28 @@ export default function ListScreen() {
     retry: false,
   });
   const sessionRequestsById = useMemo(
-    () => new Map((sessionRequestsQuery.data ?? []).map((request) => [request.id, request])),
-    [sessionRequestsQuery.data],
+    () =>
+      new Map(
+        (sessionRequestsQuery.data ?? [])
+          .filter((request) => request.sessionId === sessionId)
+          .map((request) => [request.id, request]),
+      ),
+    [sessionId, sessionRequestsQuery.data],
   );
-  const queue =
-    hasSession && sessionRequestsQuery.data
-      ? sessionRequestsQuery.data
-          .filter((request) => isActiveQueueStatus(request.status))
-          .map(mapBackendQueueItem)
-      : hasSession
-        ? [...localQueueRequests, ...localQueue]
-        : [];
+  const queue = useMemo(() => {
+    if (!hasSession || sessionId == null || !sessionRequestsQuery.data) {
+      return [];
+    }
+
+    return sessionRequestsQuery.data
+      .filter(
+        (request) =>
+          request.sessionId === sessionId &&
+          isActiveQueueStatus(request.status) &&
+          (activeEventId == null || request.eventId === activeEventId),
+      )
+      .map((request, index) => mapBackendQueueItem(request, index));
+  }, [activeEventId, hasSession, sessionId, sessionRequestsQuery.data]);
 
   const sortedQueue = useMemo(() => {
     return [...queue].sort((left, right) => {
@@ -206,6 +714,20 @@ export default function ListScreen() {
   }, [isScreenFocused, refreshSessionQueue, sessionId]);
 
   useEffect(() => {
+    setSelectedSongId(null);
+    setSelectedRequesterSongId(null);
+    setContributionError("");
+    if (sessionId != null) {
+      queryClient.setQueryData(["sessionRequests", sessionId], []);
+      queryClient.removeQueries({
+        queryKey: ["sessionRequests"],
+        predicate: (query) => query.queryKey[1] !== sessionId,
+      });
+      void queryClient.invalidateQueries({ queryKey: ["sessionRequests", sessionId] });
+    }
+  }, [queryClient, sessionId]);
+
+  useEffect(() => {
     if (!isScreenFocused || sessionId == null) {
       return undefined;
     }
@@ -242,7 +764,8 @@ export default function ListScreen() {
   }, [requesterSortDirection, requesterSortKey, selectedRequesterSong]);
   const modalAmountDollars = customAmount ? Number(customAmount || 0) : Number(selectedAmount || 0);
   const modalAmountCents = Math.max(Number.isFinite(modalAmountDollars) ? modalAmountDollars : 0, 0) * 100;
-  const canSubmitContribution = Boolean(selectedSong) && selectedSong?.status === "Open" && modalAmountCents > 0;
+  const canSubmitContribution =
+    isSessionLive && Boolean(selectedSong) && selectedSong?.status === "Open" && modalAmountCents > 0;
   const handleSubmitContribution = async () => {
     if (!selectedSong || !canSubmitContribution) {
       return;
@@ -273,19 +796,7 @@ export default function ListScreen() {
       }
     }
 
-    setLocalQueue((currentQueue) =>
-      currentQueue.map((item) =>
-        item.id === selectedSong.id
-          ? {
-              ...item,
-              totalCents: item.totalCents + modalAmountCents,
-            }
-          : item,
-      ),
-    );
-    setSelectedSongId(null);
-    setSelectedAmount("10");
-    setCustomAmount("");
+    setContributionError("This song is no longer in the live queue.");
   };
   const openRequesters = (itemId: string) => {
     const item = queue.find((queueItem) => queueItem.id === itemId);
@@ -354,7 +865,7 @@ export default function ListScreen() {
         <Ionicons
           name={sortIconName(key)}
           size={12}
-          color={sortKey === key ? "#C95A52" : premiumTheme.colors.inkMuted}
+          color={sortKey === key ? "#C95A52" : theme.colors.inkMuted}
         />
       ) : null}
     </Pressable>
@@ -377,7 +888,7 @@ export default function ListScreen() {
         <View style={styles.topBar}>
           <View style={styles.topBarLeft}>
             <Pressable style={[styles.circleButton, styles.circleButtonLight]}>
-              <Ionicons name="sparkles" size={20} color={premiumTheme.colors.background} />
+              <Ionicons name="sparkles" size={20} color={theme.colors.background} />
             </Pressable>
             <Pressable
               accessibilityLabel="Find a DJ or venue"
@@ -385,7 +896,7 @@ export default function ListScreen() {
               onPress={() => setIsPickerOpen((currentValue) => !currentValue)}
               style={[styles.circleButton, (isPickerOpen || !hasSession) && styles.circleButtonActive]}
             >
-              <Ionicons name="search" size={20} color={premiumTheme.colors.ink} />
+              <Ionicons name="search" size={20} color={theme.colors.ink} />
             </Pressable>
           </View>
           <Tag
@@ -402,6 +913,7 @@ export default function ListScreen() {
             defaultViewMode="browse"
             hideDjActions
             liveOnly
+            selectOnly
             onLiveSessionSelected={() => setIsPickerOpen(false)}
           />
         </View>
@@ -410,18 +922,43 @@ export default function ListScreen() {
       {hasSession ? (
         <>
           <View style={styles.contentInset}>
-            <Link href={(djSlug ? `/dj?slug=${encodeURIComponent(djSlug)}` : "/dj") as Href} asChild>
-              <Pressable style={styles.identityPanel}>
-                <LinearGradient colors={["#FFD2C8", "#F4B8CF", "#E8D9FF"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.identityPill, styles.identityPillDj]}>
-                  <Text style={styles.identityEyebrow}>DJ playing</Text>
-                  <Text style={styles.identityValue}>{djName}</Text>
-                </LinearGradient>
-                <LinearGradient colors={["#CFE8FF", "#D9F3F0"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.identityPill, styles.identityPillVenue]}>
-                  <Text style={styles.identityEyebrow}>Venue</Text>
-                  <Text style={styles.identityValue}>{venueName}</Text>
-                </LinearGradient>
-              </Pressable>
-            </Link>
+            <View style={styles.identitySection}>
+              <Link href={(djSlug ? `/dj?slug=${encodeURIComponent(djSlug)}` : "/dj") as Href} asChild>
+                <Pressable style={styles.identityPanel}>
+                  <LinearGradient
+                    colors={[...djGradientColors[resolvedScheme]]}
+                    end={{ x: 1, y: 1 }}
+                    start={{ x: 0, y: 0 }}
+                    style={[styles.identityPillBorder, styles.identityPillDj]}
+                  >
+                    <View style={styles.identityPillInner}>
+                      <Text style={styles.identityEyebrow}>DJ playing</Text>
+                      <Text numberOfLines={1} style={styles.identityValue}>
+                        {djName}
+                      </Text>
+                    </View>
+                  </LinearGradient>
+                  <LinearGradient
+                    colors={[...venueGradientColors[resolvedScheme]]}
+                    end={{ x: 1, y: 1 }}
+                    start={{ x: 0, y: 0 }}
+                    style={[styles.identityPillBorder, styles.identityPillVenue]}
+                  >
+                    <View style={styles.identityPillInner}>
+                      <Text style={styles.identityEyebrow}>Venue</Text>
+                      <Text numberOfLines={1} style={styles.identityValue}>
+                        {venueName}
+                      </Text>
+                    </View>
+                  </LinearGradient>
+                </Pressable>
+              </Link>
+              {showLabel ? (
+                <Text numberOfLines={1} style={styles.showSubtitle}>
+                  {showLabel}
+                </Text>
+              ) : null}
+            </View>
           </View>
 
           <View style={styles.contentInset}>
@@ -498,13 +1035,18 @@ export default function ListScreen() {
                   </Text>
                   <View style={styles.actionColumn}>
                     <Pressable
+                      disabled={!isSessionLive}
                       onPress={() => {
+                        if (!isSessionLive) {
+                          return;
+                        }
+
                         setContributionError("");
                         setSelectedSongId(item.id);
                         setSelectedAmount("10");
                         setCustomAmount("");
                       }}
-                      style={styles.arrowButton}
+                      style={[styles.arrowButton, !isSessionLive && styles.arrowButtonDisabled]}
                     >
                       <Ionicons name="arrow-up" size={13} color="#C95A52" />
                     </Pressable>
@@ -515,7 +1057,7 @@ export default function ListScreen() {
               {sortedQueue.length === 0 ? (
                 <View style={styles.emptyRow}>
                   <Text style={styles.emptyTitle}>No songs in the queue yet</Text>
-                  <Text style={styles.emptySubtitle}>Be the first to request a song for this set.</Text>
+                  <Text style={styles.emptySubtitle}>Be the first song request in queue for this set.</Text>
                 </View>
               ) : null}
             </View>
@@ -525,7 +1067,7 @@ export default function ListScreen() {
         <View style={styles.contentInset}>
           <SurfaceCard style={styles.pickRoomCard}>
             <View style={styles.emptyRow}>
-              <Ionicons name="search-outline" size={32} color={premiumTheme.colors.inkMuted} />
+              <Ionicons name="search-outline" size={32} color={theme.colors.inkMuted} />
               <Text style={styles.emptyTitle}>Find a live room</Text>
               <Text style={styles.emptySubtitle}>
                 Tap the search icon above to browse DJs and venues, then open a live list.
@@ -554,7 +1096,7 @@ export default function ListScreen() {
                 <Text style={styles.modalSubtitle}>{selectedSong?.artist}</Text>
               </View>
               <Pressable onPress={() => setSelectedSongId(null)} style={styles.modalCloseButton}>
-                <Ionicons name="close" size={18} color={premiumTheme.colors.ink} />
+                <Ionicons name="close" size={18} color={theme.colors.ink} />
               </Pressable>
             </View>
 
@@ -589,7 +1131,7 @@ export default function ListScreen() {
                     setSelectedAmount("");
                   }}
                   placeholder="Enter amount"
-                  placeholderTextColor={premiumTheme.colors.inkMuted}
+                  placeholderTextColor={theme.colors.inkMuted}
                   style={styles.customAmountInput}
                   value={customAmount}
                 />
@@ -628,7 +1170,7 @@ export default function ListScreen() {
                 </Text>
               </View>
               <Pressable onPress={() => setSelectedRequesterSongId(null)} style={styles.modalCloseButton}>
-                <Ionicons name="close" size={18} color={premiumTheme.colors.ink} />
+                <Ionicons name="close" size={18} color={theme.colors.ink} />
               </Pressable>
             </View>
 
@@ -652,7 +1194,7 @@ export default function ListScreen() {
                 <Ionicons
                   name={requesterSortIconName("chronological")}
                   size={10}
-                  color={requesterSortKey === "chronological" ? "#A3485B" : premiumTheme.colors.inkMuted}
+                  color={requesterSortKey === "chronological" ? "#A3485B" : theme.colors.inkMuted}
                 />
               </Pressable>
               <Pressable
@@ -674,7 +1216,7 @@ export default function ListScreen() {
                 <Ionicons
                   name={requesterSortIconName("price")}
                   size={10}
-                  color={requesterSortKey === "price" ? "#A3485B" : premiumTheme.colors.inkMuted}
+                  color={requesterSortKey === "price" ? "#A3485B" : theme.colors.inkMuted}
                 />
               </Pressable>
             </View>
@@ -695,7 +1237,7 @@ export default function ListScreen() {
                       <Text style={styles.requesterListHandle}>{requester.handle}</Text>
                     </View>
                     <Text style={styles.requesterListAmount}>{formatUsd(requester.paidCents)}</Text>
-                    <Ionicons name="chevron-forward" size={18} color={premiumTheme.colors.inkMuted} />
+                    <Ionicons name="chevron-forward" size={18} color={theme.colors.inkMuted} />
                   </Pressable>
                 </Link>
               ))}
@@ -706,467 +1248,3 @@ export default function ListScreen() {
     </ScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  actionColumn: {
-    alignItems: "flex-end",
-    width: 30,
-  },
-  amountOption: {
-    backgroundColor: premiumTheme.colors.surface,
-    borderColor: premiumTheme.colors.border,
-    borderRadius: 18,
-    borderWidth: 1,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-  },
-  amountOptionSelected: {
-    backgroundColor: "#EAF2FF",
-    borderColor: "#6A95FF",
-  },
-  amountOptionText: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 20,
-    fontWeight: "700",
-  },
-  amountOptionTextSelected: {
-    color: "#2457D6",
-  },
-  amountSelector: {
-    maxHeight: 280,
-  },
-  amountSelectorContent: {
-    gap: 10,
-    paddingRight: 4,
-  },
-  arrowButton: {
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderColor: "#D98A84",
-    borderRadius: 999,
-    borderWidth: 1,
-    height: 28,
-    justifyContent: "center",
-    width: 28,
-  },
-  circleButton: {
-    alignItems: "center",
-    backgroundColor: "#F7F5F2",
-    borderColor: premiumTheme.colors.border,
-    borderRadius: 24,
-    borderWidth: 1,
-    height: 48,
-    justifyContent: "center",
-    shadowColor: "#5B6474",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    width: 48,
-  },
-  circleButtonLight: {
-    backgroundColor: "#D94E3D",
-  },
-  circleButtonActive: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#E2AAB1",
-  },
-  customAmountInput: {
-    backgroundColor: premiumTheme.colors.surface,
-    borderColor: premiumTheme.colors.border,
-    borderRadius: 18,
-    borderWidth: 1,
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  customAmountLabel: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-  },
-  customAmountWrap: {
-    gap: 8,
-    paddingTop: 8,
-  },
-  contentInset: {
-    paddingHorizontal: 20,
-  },
-  contributionError: {
-    color: "#B42318",
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-    textAlign: "center",
-  },
-  emptyRow: {
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 24,
-    paddingVertical: 28,
-  },
-  emptySubtitle: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-    textAlign: "center",
-  },
-  emptyTitle: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  identityEyebrow: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-  identityPanel: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  identityPill: {
-    borderColor: premiumTheme.colors.border,
-    borderRadius: 999,
-    borderWidth: 1,
-    gap: 4,
-    overflow: "hidden",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  identityPillDj: {
-    flex: 0.8,
-  },
-  identityPillVenue: {
-    flex: 0.2,
-  },
-  identityValue: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  pickRoomButton: {
-    alignItems: "center",
-    backgroundColor: "#D94E3D",
-    borderRadius: 999,
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 8,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-  },
-  pickRoomButtonText: {
-    color: "#FFFFFF",
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  pickRoomCard: {
-    marginTop: 8,
-  },
-  modalBackdrop: {
-    backgroundColor: "rgba(30,23,23,0.4)",
-    flex: 1,
-    justifyContent: "flex-end",
-    padding: 16,
-  },
-  modalCard: {
-    backgroundColor: premiumTheme.colors.surfaceElevated,
-    borderRadius: 24,
-    gap: 14,
-    maxHeight: "88%",
-    padding: 20,
-  },
-  modalCloseButton: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.surface,
-    borderRadius: 999,
-    height: 36,
-    justifyContent: "center",
-    width: 36,
-  },
-  modalCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  modalCta: {
-    alignItems: "center",
-    backgroundColor: "#D94E3D",
-    borderRadius: 999,
-    justifyContent: "center",
-    paddingVertical: 16,
-  },
-  modalCtaDisabled: {
-    opacity: 0.45,
-  },
-  modalCtaText: {
-    color: premiumTheme.colors.text,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  modalEyebrow: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-  modalHeader: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 12,
-  },
-  modalSubtitle: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 14,
-  },
-  modalTitle: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 24,
-    fontWeight: "800",
-  },
-  priceColumn: {
-    alignItems: "flex-end",
-    textAlign: "right",
-    width: 54,
-  },
-  requesterAvatar: {
-    backgroundColor: "#E8D9FF",
-    borderColor: "#FFFFFF",
-    borderRadius: 17,
-    borderWidth: 2,
-    height: 34,
-    overflow: "hidden",
-    width: 34,
-  },
-  requesterList: {
-    gap: 10,
-    paddingRight: 2,
-  },
-  requesterListAvatar: {
-    borderRadius: 22,
-    height: 44,
-    width: 44,
-  },
-  requesterListAmount: {
-    color: "#5E78B8",
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 15,
-    fontWeight: "800",
-    textAlign: "right",
-  },
-  requesterListCopy: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0,
-  },
-  requesterListHandle: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-  },
-  requesterListItem: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.surface,
-    borderColor: premiumTheme.colors.border,
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    padding: 12,
-  },
-  requesterListName: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  requesterListScroll: {
-    maxHeight: 480,
-  },
-  requesterSortControl: {
-    alignSelf: "flex-start",
-    backgroundColor: premiumTheme.colors.surface,
-    borderColor: premiumTheme.colors.border,
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: "row",
-    padding: 3,
-  },
-  requesterSortOption: {
-    alignItems: "center",
-    borderRadius: 9,
-    flexDirection: "row",
-    gap: 3,
-    justifyContent: "center",
-    minWidth: 82,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  requesterSortOptionActive: {
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#5B6474",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-  },
-  requesterSortText: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 10,
-    fontWeight: "800",
-  },
-  requesterSortTextActive: {
-    color: "#A3485B",
-  },
-  screenContent: {
-    flexGrow: 1,
-    paddingBottom: 0,
-    paddingHorizontal: 0,
-  },
-  songArtist: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  songColumn: {
-    flex: 1,
-    minWidth: 0,
-    paddingRight: 4,
-  },
-  songTitle: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 16,
-    fontWeight: "700",
-    lineHeight: 19,
-  },
-  rqstsCell: {
-    color: "#A3485B",
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 14,
-    fontWeight: "800",
-    minWidth: 14,
-  },
-  rqstsButton: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 6,
-    justifyContent: "flex-start",
-    width: 72,
-  },
-  rqstsColumn: {
-    alignItems: "flex-start",
-    textAlign: "left",
-    width: 72,
-  },
-  searchClearButton: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.surface,
-    borderRadius: 999,
-    height: 30,
-    justifyContent: "center",
-    width: 30,
-  },
-  searchInput: {
-    color: premiumTheme.colors.ink,
-    flex: 1,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 15,
-    minWidth: 0,
-    paddingVertical: 0,
-  },
-  searchPanel: {
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderColor: premiumTheme.colors.border,
-    borderRadius: 22,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    shadowColor: "#5B6474",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-  },
-  sortHeaderButton: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 2,
-    justifyContent: "flex-end",
-  },
-  sortHeaderButtonLeft: {
-    justifyContent: "flex-start",
-  },
-  supportCell: {
-    color: "#5E78B8",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  table: {
-    flexGrow: 1,
-    width: "100%",
-  },
-  tableBodyDivider: {
-    borderBottomColor: premiumTheme.colors.border,
-    borderBottomWidth: 1,
-  },
-  tableCard: {
-    borderRadius: 22,
-    flexGrow: 1,
-    overflow: "hidden",
-    padding: 0,
-    shadowOpacity: 0.04,
-  },
-  tableCell: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 14,
-  },
-  tableHeaderCell: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
-  },
-  tableHeaderCellActive: {
-    color: "#C95A52",
-  },
-  tableHeaderRow: {
-    backgroundColor: "rgba(30,23,23,0.06)",
-  },
-  tableRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-  },
-  topBar: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  topBarLeft: {
-    flexDirection: "row",
-    gap: 12,
-  },
-});

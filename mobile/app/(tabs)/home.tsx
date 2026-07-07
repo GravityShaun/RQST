@@ -10,32 +10,152 @@ import {
   SectionTitle,
   SurfaceCard,
   Tag,
-  premiumTheme,
 } from "../../src/components/premium-ui";
 import { HomeDirectorySearch } from "../../src/features/home/HomeDirectorySearch";
 import { useMockHomeData } from "../../src/features/home/useMockHomeData";
 import { nearbyDjs, topRequestedSongs } from "../../src/features/rqst/mock-data";
 import { unsplashImages } from "../../src/lib/unsplash";
+import { usePremiumTheme, useThemedStyles } from "../../src/store/theme";
 
 export default function HomeScreen() {
   const data = useMockHomeData();
+  const theme = usePremiumTheme();
+  const styles = useThemedStyles((activeTheme) =>
+    StyleSheet.create({
+      circleButton: {
+        alignItems: "center",
+        backgroundColor: activeTheme.colors.surfaceElevated,
+        borderColor: activeTheme.colors.border,
+        borderRadius: 24,
+        borderWidth: 1,
+        height: 48,
+        justifyContent: "center",
+        position: "relative",
+        shadowColor: activeTheme.colors.shadow,
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.12,
+        shadowRadius: 18,
+        width: 48,
+      },
+      circleButtonLight: {
+        backgroundColor: "#D94E3D",
+      },
+      mosaicCard: {
+        backgroundColor: activeTheme.colors.surfaceElevated,
+        borderColor: activeTheme.colors.border,
+        borderRadius: 30,
+        borderWidth: 1,
+        flex: 1,
+        gap: 12,
+        minHeight: 190,
+        overflow: "hidden",
+        padding: 12,
+      },
+      mosaicImage: {
+        borderRadius: 22,
+      },
+      mosaicImageWrap: {
+        borderRadius: 22,
+        height: 126,
+        justifyContent: "flex-end",
+      },
+      mosaicMint: {
+        backgroundColor: "#91D4C5",
+      },
+      mosaicOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: "rgba(32, 24, 24, 0.10)",
+      },
+      mosaicPeach: {
+        backgroundColor: "#E79E8A",
+      },
+      mosaicRow: {
+        flexDirection: "row",
+        gap: 12,
+      },
+      mosaicSubtitle: {
+        color: activeTheme.colors.inkMuted,
+        fontFamily: activeTheme.fonts.body,
+        fontSize: 13,
+        lineHeight: 18,
+      },
+      mosaicTitle: {
+        color: activeTheme.colors.ink,
+        fontFamily: activeTheme.fonts.display,
+        fontSize: 28,
+        fontWeight: "700",
+        lineHeight: 30,
+        marginTop: "auto",
+      },
+      notificationDot: {
+        alignItems: "center",
+        backgroundColor: activeTheme.colors.coral,
+        borderColor: "#F9DFD5",
+        borderRadius: 10,
+        borderWidth: 1.5,
+        height: 20,
+        justifyContent: "center",
+        left: -8,
+        position: "absolute",
+        top: 4,
+        width: 20,
+        zIndex: 2,
+      },
+      notificationDotText: {
+        color: "#FFFFFF",
+        fontFamily: activeTheme.fonts.body,
+        fontSize: 11,
+        fontWeight: "800",
+      },
+      topBar: {
+        alignItems: "center",
+        flexDirection: "row",
+        justifyContent: "space-between",
+      },
+      topBarLeft: {
+        flexDirection: "row",
+        gap: 12,
+      },
+      welcomeEyebrow: {
+        color: activeTheme.colors.inkMuted,
+        fontFamily: activeTheme.fonts.body,
+        fontSize: 12,
+        fontWeight: "700",
+        letterSpacing: 1.2,
+        textTransform: "uppercase",
+      },
+      welcomeRow: {
+        alignItems: "center",
+        flexDirection: "row",
+        justifyContent: "space-between",
+      },
+      welcomeTitle: {
+        color: activeTheme.colors.ink,
+        fontFamily: activeTheme.fonts.display,
+        fontSize: 40,
+        fontWeight: "800",
+        lineHeight: 42,
+        marginTop: 6,
+      },
+    }),
+  );
 
   return (
     <ScreenShell>
       <View style={styles.topBar}>
         <View style={styles.topBarLeft}>
           <Pressable style={[styles.circleButton, styles.circleButtonLight]}>
-            <Ionicons name="sparkles" size={20} color={premiumTheme.colors.background} />
+            <Ionicons name="sparkles" size={20} color={theme.colors.background} />
           </Pressable>
           <Pressable style={styles.circleButton}>
-            <Ionicons name="search" size={20} color={premiumTheme.colors.ink} />
+            <Ionicons name="search" size={20} color={theme.colors.ink} />
           </Pressable>
         </View>
         <Pressable style={styles.circleButton}>
           <View style={styles.notificationDot}>
             <Text style={styles.notificationDotText}>9</Text>
           </View>
-          <Ionicons name="notifications-outline" size={20} color={premiumTheme.colors.ink} />
+          <Ionicons name="notifications-outline" size={20} color={theme.colors.ink} />
         </Pressable>
       </View>
 
@@ -112,121 +232,3 @@ export default function HomeScreen() {
     </ScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  circleButton: {
-    alignItems: "center",
-    backgroundColor: "#F7F5F2",
-    borderColor: premiumTheme.colors.border,
-    borderRadius: 24,
-    borderWidth: 1,
-    height: 48,
-    justifyContent: "center",
-    position: "relative",
-    shadowColor: "#5B6474",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    width: 48,
-  },
-  circleButtonLight: {
-    backgroundColor: "#D94E3D",
-  },
-  mosaicCard: {
-    backgroundColor: "rgba(255,255,255,0.64)",
-    borderColor: "rgba(255,255,255,0.28)",
-    borderWidth: 1,
-    borderRadius: 30,
-    flex: 1,
-    gap: 12,
-    minHeight: 190,
-    overflow: "hidden",
-    padding: 12,
-  },
-  mosaicImage: {
-    borderRadius: 22,
-  },
-  mosaicImageWrap: {
-    borderRadius: 22,
-    height: 126,
-    justifyContent: "flex-end",
-  },
-  mosaicMint: {
-    backgroundColor: "#91D4C5",
-  },
-  mosaicOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(32, 24, 24, 0.10)",
-  },
-  mosaicPeach: {
-    backgroundColor: "#E79E8A",
-  },
-  mosaicRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  mosaicSubtitle: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  mosaicTitle: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 28,
-    fontWeight: "700",
-    lineHeight: 30,
-    marginTop: "auto",
-  },
-  notificationDot: {
-    alignItems: "center",
-    backgroundColor: premiumTheme.colors.coral,
-    borderColor: "#F9DFD5",
-    borderRadius: 10,
-    borderWidth: 1.5,
-    height: 20,
-    justifyContent: "center",
-    left: -8,
-    position: "absolute",
-    top: 4,
-    width: 20,
-    zIndex: 2,
-  },
-  notificationDotText: {
-    color: "#FFFFFF",
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  topBar: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  topBarLeft: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  welcomeEyebrow: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-  },
-  welcomeRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  welcomeTitle: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 40,
-    fontWeight: "800",
-    lineHeight: 42,
-    marginTop: 6,
-  },
-});

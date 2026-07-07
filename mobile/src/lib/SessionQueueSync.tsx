@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { SongRequestSummary } from "@rqst/contracts";
+import { apiRouteBuilders, type SongRequestSummary } from "@rqst/contracts";
 
 import { wsBaseUrl } from "./api-config";
 import { toCamelCase } from "./json";
@@ -16,7 +16,13 @@ type QueueUpdatedMessage = {
 };
 
 const RECONNECT_DELAY_MS = 3_000;
-const INACTIVE_QUEUE_STATUSES = new Set(["cancelled", "rejected", "refunded"]);
+const SELECTED_TOAST_DURATION_MS = 12_000;
+const INACTIVE_QUEUE_STATUSES = new Set(["cancelled", "rejected", "refunded", "expired"]);
+const SELECTED_NOTIFICATION_STATUSES = new Set<SongRequestSummary["status"]>(["confirmed_by_dj", "played"]);
+
+function filterActiveQueueRequests(requests: SongRequestSummary[]): SongRequestSummary[] {
+  return requests.filter((request) => isActiveQueueStatus(request.status));
+}
 
 function mergeMyRequest(existing: SongRequestSummary, updated: SongRequestSummary): SongRequestSummary {
   return {
@@ -38,12 +44,12 @@ export function SessionQueueSync() {
   const isSignedIn = useAuthStore((state) => state.status === "authenticated" && Boolean(state.accessToken));
   const showToast = useToastStore((state) => state.showToast);
   const { sessionId } = useActiveSession({ requireSelection: true });
-  const seededPlayedIdsRef = useRef<Set<number>>(new Set());
-  const hasSeededPlayedIdsRef = useRef(false);
+  const seededNotifiedIdsRef = useRef<Set<number>>(new Set());
+  const hasSeededNotifiedIdsRef = useRef(false);
 
   useEffect(() => {
-    seededPlayedIdsRef.current.clear();
-    hasSeededPlayedIdsRef.current = false;
+    seededNotifiedIdsRef.current.clear();
+    hasSeededNotifiedIdsRef.current = false;
   }, [sessionId]);
 
   useEffect(() => {
@@ -56,31 +62,33 @@ export function SessionQueueSync() {
     let cancelled = false;
 
     function applyQueueUpdate(rawRequests: unknown[]) {
-      const requests = toCamelCase<SongRequestSummary[]>(rawRequests);
+      const requests = filterActiveQueueRequests(toCamelCase<SongRequestSummary[]>(rawRequests));
       queryClient.setQueryData(["sessionRequests", sessionId], requests);
 
       const myRequests = queryClient.getQueryData<SongRequestSummary[]>(["meRequests"]) ?? [];
       const myRequestsById = new Map(myRequests.map((request) => [request.id, request]));
 
-      if (!hasSeededPlayedIdsRef.current) {
+      if (!hasSeededNotifiedIdsRef.current) {
         for (const request of requests) {
-          if (request.status === "played") {
-            seededPlayedIdsRef.current.add(request.id);
+          if (SELECTED_NOTIFICATION_STATUSES.has(request.status)) {
+            seededNotifiedIdsRef.current.add(request.id);
           }
         }
-        hasSeededPlayedIdsRef.current = true;
+        hasSeededNotifiedIdsRef.current = true;
       } else {
         for (const request of requests) {
-          if (request.status !== "played" || seededPlayedIdsRef.current.has(request.id)) {
+          if (!SELECTED_NOTIFICATION_STATUSES.has(request.status) || seededNotifiedIdsRef.current.has(request.id)) {
             continue;
           }
 
-          seededPlayedIdsRef.current.add(request.id);
+          seededNotifiedIdsRef.current.add(request.id);
           const myRequest = myRequestsById.get(request.id);
           if (isSignedIn && myRequest && myRequest.myContributionCents > 0) {
             showToast({
-              title: "Your song was played",
+              title: "Your song was selected and will play soon",
               message: `${request.songTitle ?? "Your request"} · ${request.songArtist ?? "Unknown artist"}`,
+              durationMs: SELECTED_TOAST_DURATION_MS,
+              showConfetti: true,
             });
           }
         }
@@ -108,6 +116,25 @@ export function SessionQueueSync() {
         );
       }
     }
+
+    async function syncQueueFromApi() {
+      try {
+        const requests = filterActiveQueueRequests(
+          await rqstApi<SongRequestSummary[]>(
+            apiRouteBuilders.sessionRequests(sessionId).replace("/api/v1", ""),
+            { auth: false },
+          ),
+        );
+        if (cancelled) {
+          return;
+        }
+        queryClient.setQueryData(["sessionRequests", sessionId], requests);
+      } catch {
+        // Keep the websocket subscription alive even if the initial fetch fails.
+      }
+    }
+
+    void syncQueueFromApi();
 
     function connect() {
       if (cancelled) {

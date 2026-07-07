@@ -29,6 +29,8 @@ export interface SessionSummary {
   venueName: string;
   minimumRequestAmountCents: number;
   status: "live" | "paused" | "ended" | "not_started";
+  eventName?: string | null;
+  eventStartsAt?: string | null;
 }
 
 export interface QueueItem {
@@ -99,7 +101,7 @@ export interface PlaceSearchResult {
 export interface DjEvent {
   id: number;
   djProfileId: number;
-  name: string;
+  name?: string | null;
   description?: string | null;
   startsAt: string;
   endsAt?: string | null;
@@ -143,6 +145,7 @@ export interface SongRequestSummary {
   venueId?: number | null;
   venueName?: string | null;
   eventId?: number | null;
+  eventName?: string | null;
   requesterDisplayName?: string | null;
   requesterAvatarUrl?: string | null;
   myContributionCents: number;
@@ -157,4 +160,80 @@ export interface SongRequestSummary {
   latestPaymentStatus?: string | null;
   checkoutUrl?: string | null;
   contributors: RequestContributor[];
+}
+
+export type LedgerStatus =
+  | "pending_confirmation"
+  | "available"
+  | "reversed"
+  | "on_hold"
+  | "paid_out";
+
+export interface EarningsSummary {
+  lifetimeGrossCents: number;
+  lifetimeNetCents: number;
+  pendingConfirmationCents: number;
+  showPoolCents: number;
+  walletAvailableCents: number;
+  paidOutCents: number;
+  platformFeesCents: number;
+  processingFeesCents: number;
+  polarConnected: boolean;
+  currency: string;
+}
+
+export interface ShowEarnings {
+  sessionId: number;
+  eventId?: number | null;
+  eventName?: string | null;
+  venueName: string;
+  status: "live" | "paused" | "ended" | "not_started";
+  startedAt?: string | null;
+  endedAt?: string | null;
+  grossCents: number;
+  netCents: number;
+  showPoolCents: number;
+  walletCents: number;
+  pendingCents: number;
+  songsPlayed: number;
+  songsPending: number;
+}
+
+export interface LedgerEntry {
+  id: number;
+  sessionId: number;
+  songRequestId: number;
+  paymentId: number;
+  songTitle?: string | null;
+  songArtist?: string | null;
+  grossAmountCents: number;
+  netAmountCents: number;
+  amountCents: number;
+  status: LedgerStatus;
+  venueName?: string | null;
+  eventName?: string | null;
+  playedAt?: string | null;
+  availableAt?: string | null;
+  paidOutAt?: string | null;
+  createdAt: string;
+}
+
+export type SongPayoutStatus = "show_pool" | "in_wallet" | "paid_out";
+
+export interface PlayedSongEarnings {
+  songRequestId: number;
+  sessionId: number;
+  songTitle?: string | null;
+  songArtist?: string | null;
+  songTotalCents: number;
+  venueName?: string | null;
+  eventName?: string | null;
+  playedAt: string;
+  payoutStatus: SongPayoutStatus;
+}
+
+export interface DjEarningsDashboard {
+  summary: EarningsSummary;
+  shows: ShowEarnings[];
+  recentEntries: PlayedSongEarnings[];
 }

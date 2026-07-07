@@ -6,10 +6,10 @@
           <div class="eyebrow">Tour calendar</div>
           <h1 style="margin: 0 0 8px; font-size: 2.4rem">Shows & events</h1>
           <p class="muted" style="margin: 0">
-            Add upcoming gigs with venue details, dates, ticket links, and flyers. Fans will see these on your profile.
+            Manage upcoming and past gigs with venue details, dates, ticket links, and flyers. Fans will see these on your profile.
           </p>
         </div>
-        <button class="btn btn-primary" type="button" @click="startCreate">
+        <button class="btn btn-primary add-show-btn" type="button" @click="startCreate">
           {{ showForm ? "Cancel" : "Add show" }}
         </button>
       </div>
@@ -26,8 +26,8 @@
           <div class="form-section-title">Event details</div>
 
           <label class="form-field">
-            <span class="form-label">Show name</span>
-            <input v-model="form.name" class="form-input" maxlength="255" required type="text" />
+            <span class="form-label">Show name (optional)</span>
+            <input v-model="form.name" class="form-input" maxlength="255" placeholder="Leave blank to use date only" type="text" />
           </label>
 
           <label class="form-field">
@@ -37,13 +37,26 @@
 
           <div class="form-grid-two">
             <label class="form-field">
-              <span class="form-label">Starts</span>
-              <input v-model="form.startsAt" class="form-input" required type="datetime-local" />
+              <span class="form-label">Start time</span>
+              <div class="start-time-input-wrap">
+                <input
+                  v-model="form.startsAt"
+                  class="form-input start-time-input"
+                  required
+                  type="datetime-local"
+                />
+                <button class="start-now-btn" type="button" @click="startNow">Start now</button>
+              </div>
             </label>
 
             <label class="form-field">
-              <span class="form-label">Ends (optional)</span>
-              <input v-model="form.endsAt" class="form-input" type="datetime-local" />
+              <span class="form-label">Duration</span>
+              <select v-model.number="form.durationMinutes" class="form-input" required>
+                <option v-for="option in showDurationOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+              <p v-if="computedEndPreview" class="form-help">Ends {{ computedEndPreview }}</p>
             </label>
           </div>
 
@@ -189,6 +202,7 @@
         <p v-if="saveMessage" class="form-success">{{ saveMessage }}</p>
 
         <div class="btn-row">
+          <button class="btn btn-secondary" type="button" @click="closeForm">Cancel</button>
           <button class="btn btn-primary" :disabled="saving || uploadingFlyer" type="submit">
             {{
               saving
@@ -204,55 +218,92 @@
       </form>
     </section>
 
+    <div v-if="!pending" class="segment-tabs cols-3 shows-filter-tabs" role="group" aria-label="Show filters">
+      <button
+        v-for="tab in showFilterTabs"
+        :key="tab.id"
+        class="segment-tab"
+        :class="{ 'is-selected': activeShowFilter === tab.id }"
+        type="button"
+        @click="activeShowFilter = tab.id"
+      >
+        {{ tab.label }}
+      </button>
+    </div>
+
     <section v-if="!pending" class="shows-list">
-      <div v-if="sortedEvents.length === 0" class="card empty-state">
-        <div class="section-title">No shows yet</div>
-        <p class="muted" style="margin: 0">Add your first upcoming gig so fans know where to find you.</p>
+      <div v-if="filteredEvents.length === 0" class="card empty-state">
+        <div class="section-title">{{ emptyStateTitle }}</div>
+        <p class="muted" style="margin: 0">{{ emptyStateMessage }}</p>
       </div>
 
-      <article v-for="event in sortedEvents" :key="event.id" class="card show-card">
-        <div class="show-card-layout">
-          <div v-if="resolveAssetUrl(event.flyerUrl)" class="show-flyer">
-            <img :src="resolveAssetUrl(event.flyerUrl)!" :alt="`${event.name} flyer`" />
+      <article
+        v-for="event in filteredEvents"
+        :key="event.id"
+        class="show-card"
+        :class="{
+          'show-card--ended': getEventStatus(event) === 'ended',
+          'show-card--live': getEventStatus(event) === 'live',
+          'show-card--upcoming': getEventStatus(event) === 'upcoming',
+        }"
+      >
+        <div class="show-card-media">
+          <img
+            v-if="resolveAssetUrl(event.flyerUrl)"
+            class="show-flyer-image"
+            :src="resolveAssetUrl(event.flyerUrl)!"
+            :alt="`${event.name || 'Show'} flyer`"
+          />
+          <div v-else class="show-flyer-fallback" aria-hidden="true">
+            <span class="show-flyer-month">{{ formatShowMonth(event.startsAt) }}</span>
+            <span class="show-flyer-day">{{ formatShowDay(event.startsAt) }}</span>
+          </div>
+          <span class="show-status-pill" :class="statusPillClass(event)">{{ statusLabel(event) }}</span>
+        </div>
+
+        <div class="show-card-content">
+          <div class="show-card-copy">
+            <time class="show-date">{{ formatEventDateTime(event.startsAt) }}</time>
+            <h2 class="show-title">{{ event.name || formatEventDateTime(event.startsAt) }}</h2>
+            <div class="show-venue">{{ event.venue.name }}</div>
+            <div class="show-address">
+              {{ event.venue.city
+              }}<template v-if="event.venue.state">, {{ event.venue.state }}</template>
+            </div>
+            <p v-if="event.description" class="show-description">{{ event.description }}</p>
           </div>
 
-          <div class="show-card-body">
-            <div class="show-card-header">
-              <div>
-                <div class="show-date">{{ formatEventDateTime(event.startsAt) }}</div>
-                <h2 class="show-title">{{ event.name }}</h2>
-                <div class="show-venue">{{ event.venue.name }}</div>
-                <div class="show-address">
-                  {{ event.venue.address }}, {{ event.venue.city
-                  }}<template v-if="event.venue.state">, {{ event.venue.state }}</template>
-                </div>
-              </div>
-              <div class="show-card-actions">
-                <button class="btn btn-secondary" type="button" @click="startEdit(event)">Edit</button>
-                <button
-                  class="btn btn-secondary"
-                  :disabled="saving"
-                  type="button"
-                  @click="handleDelete(event.id)"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-
-            <p v-if="event.description" class="show-description">{{ event.description }}</p>
-
+          <div class="show-card-footer">
             <div class="show-meta">
-              <span v-if="event.endsAt" class="tag">Ends {{ formatEventDateTime(event.endsAt) }}</span>
+              <span v-if="getEventStatus(event) === 'ended'" class="show-meta-chip show-meta-chip--ended">
+                Ended {{ formatEventDateTime(getEventEffectiveEnd(event)!.toISOString()) }}
+              </span>
+              <span v-else-if="getEventStatus(event) === 'live'" class="show-meta-chip show-meta-chip--live">
+                Ends {{ formatEventDateTime(getEventEffectiveEnd(event)!.toISOString()) }}
+              </span>
               <a
                 v-if="event.ticketUrl"
-                class="tag tag-coral"
+                class="show-meta-chip show-meta-chip--ticket"
                 :href="event.ticketUrl"
                 rel="noopener noreferrer"
                 target="_blank"
               >
                 Tickets
               </a>
+            </div>
+
+            <div v-if="getEventStatus(event) !== 'ended'" class="show-action-bar">
+              <button class="show-action show-action--edit" type="button" @click="startEdit(event)">
+                Edit
+              </button>
+              <button
+                class="show-action show-action--delete"
+                :disabled="saving"
+                type="button"
+                @click="handleDelete(event.id)"
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>
@@ -272,8 +323,32 @@ import {
 import {
   formatEventDateTime,
   fromDateTimeLocalValue,
+  parseApiDateTime,
   toDateTimeLocalValue,
 } from "~/utils/datetime";
+import {
+  computeShowEndIso,
+  deriveShowDurationMinutes,
+  getShowEffectiveEnd,
+  getShowStatus,
+  isShowPast,
+  isShowUpcoming,
+  SHOW_DURATION_OPTIONS,
+  type ShowFilter,
+  type ShowStatus,
+} from "~/utils/shows";
+
+const showFilterTabs: { id: ShowFilter; label: string }[] = [
+  { id: "all", label: "All shows" },
+  { id: "upcoming", label: "Upcoming" },
+  { id: "past", label: "Past shows" },
+];
+
+const showDurationOptions = SHOW_DURATION_OPTIONS;
+
+const activeShowFilter = ref<ShowFilter>("all");
+const nowMs = ref(Date.now());
+let showStatusTimer: ReturnType<typeof setInterval> | null = null;
 
 const {
   events,
@@ -307,6 +382,113 @@ const sortedEvents = computed(() =>
   ),
 );
 
+const filteredEvents = computed(() => {
+  const current = nowMs.value;
+  const items = sortedEvents.value.filter((event) => {
+    if (activeShowFilter.value === "upcoming") {
+      return isShowUpcoming(event, current);
+    }
+
+    if (activeShowFilter.value === "past") {
+      return isShowPast(event, current);
+    }
+
+    return true;
+  });
+
+  if (activeShowFilter.value === "past") {
+    return [...items].sort(
+      (left, right) => new Date(right.startsAt).getTime() - new Date(left.startsAt).getTime(),
+    );
+  }
+
+  return items;
+});
+
+const emptyStateTitle = computed(() => {
+  if (events.value.length === 0) {
+    return "No shows yet";
+  }
+
+  if (activeShowFilter.value === "upcoming") {
+    return "No upcoming shows";
+  }
+
+  if (activeShowFilter.value === "past") {
+    return "No past shows";
+  }
+
+  return "No shows yet";
+});
+
+const emptyStateMessage = computed(() => {
+  if (events.value.length === 0) {
+    return "Add your first gig so fans know where to find you.";
+  }
+
+  if (activeShowFilter.value === "upcoming") {
+    return "Add a new show to fill your calendar.";
+  }
+
+  if (activeShowFilter.value === "past") {
+    return "Past shows appear here after they end.";
+  }
+
+  return "Add your first gig so fans know where to find you.";
+});
+
+function getEventStatus(event: DjEvent): ShowStatus {
+  return getShowStatus(event, nowMs.value);
+}
+
+function getEventEffectiveEnd(event: DjEvent) {
+  return getShowEffectiveEnd(event);
+}
+
+function statusLabel(event: DjEvent): string {
+  const status = getEventStatus(event);
+  if (status === "live") {
+    return "Live now";
+  }
+
+  if (status === "ended") {
+    return "Ended";
+  }
+
+  return "Upcoming";
+}
+
+function statusPillClass(event: DjEvent): string {
+  const status = getEventStatus(event);
+  if (status === "live") {
+    return "show-status-pill--live";
+  }
+
+  if (status === "ended") {
+    return "show-status-pill--ended";
+  }
+
+  return "show-status-pill--upcoming";
+}
+
+function formatShowMonth(value: string): string {
+  const date = parseApiDateTime(value);
+  if (!date) {
+    return "---";
+  }
+
+  return new Intl.DateTimeFormat(undefined, { month: "short" }).format(date).toUpperCase();
+}
+
+function formatShowDay(value: string): string {
+  const date = parseApiDateTime(value);
+  if (!date) {
+    return "--";
+  }
+
+  return String(date.getDate());
+}
+
 const flyerPreviewUrl = computed(() => {
   if (localFlyerPreview.value) {
     return localFlyerPreview.value;
@@ -318,6 +500,16 @@ const flyerPreviewUrl = computed(() => {
 
   const event = events.value.find((item) => item.id === editingEventId.value);
   return resolveAssetUrl(event?.flyerUrl);
+});
+
+const computedEndPreview = computed(() => {
+  const startsAt = fromDateTimeLocalValue(form.value.startsAt);
+  if (!startsAt) {
+    return "";
+  }
+
+  const endsAt = computeShowEndIso(startsAt, form.value.durationMinutes);
+  return endsAt ? formatEventDateTime(endsAt) : "";
 });
 
 watch(venueSearchQuery, (query) => {
@@ -352,10 +544,14 @@ function clearPendingFlyer() {
   clearLocalFlyerPreview();
 }
 
+function closeForm() {
+  showForm.value = false;
+  resetForm();
+}
+
 function startCreate() {
-  if (showForm.value && !editingEventId.value) {
-    showForm.value = false;
-    resetForm();
+  if (showForm.value) {
+    closeForm();
     return;
   }
 
@@ -363,15 +559,19 @@ function startCreate() {
   showForm.value = true;
 }
 
+function startNow() {
+  form.value.startsAt = toDateTimeLocalValue(new Date());
+}
+
 function startEdit(event: DjEvent) {
   editingEventId.value = event.id;
   pendingFlyerFile.value = null;
   clearLocalFlyerPreview();
   form.value = {
-    name: event.name,
+    name: event.name ?? "",
     description: event.description ?? "",
     startsAt: toDateTimeLocalValue(event.startsAt),
-    endsAt: toDateTimeLocalValue(event.endsAt ?? ""),
+    durationMinutes: deriveShowDurationMinutes(event),
     ticketUrl: event.ticketUrl ?? "",
     venue: {
       name: event.venue.name,
@@ -411,23 +611,13 @@ function clearSelectedVenueId() {
 }
 
 function validateForm(): string | null {
-  if (!form.value.name.trim()) {
-    return "Show name is required.";
-  }
-
   const startsAt = fromDateTimeLocalValue(form.value.startsAt);
   if (!startsAt) {
     return "Start date and time are required.";
   }
 
-  if (form.value.endsAt) {
-    const endsAt = fromDateTimeLocalValue(form.value.endsAt);
-    if (!endsAt) {
-      return "End date and time are invalid.";
-    }
-    if (new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
-      return "End time must be after the start time.";
-    }
+  if (!form.value.durationMinutes || form.value.durationMinutes <= 0) {
+    return "Duration is required.";
   }
 
   if (!form.value.venue.name.trim() || !form.value.venue.address.trim() || !form.value.venue.city.trim()) {
@@ -450,7 +640,6 @@ async function handleSubmit() {
   const payload: EventFormInput = {
     ...form.value,
     startsAt: fromDateTimeLocalValue(form.value.startsAt) ?? "",
-    endsAt: form.value.endsAt ? fromDateTimeLocalValue(form.value.endsAt) ?? "" : "",
   };
 
   try {
@@ -504,9 +693,18 @@ async function handleDelete(eventId: number) {
   }
 }
 
+onMounted(() => {
+  showStatusTimer = setInterval(() => {
+    nowMs.value = Date.now();
+  }, 30_000);
+});
+
 onBeforeUnmount(() => {
   if (venueSearchTimer) {
     clearTimeout(venueSearchTimer);
+  }
+  if (showStatusTimer) {
+    clearInterval(showStatusTimer);
   }
   clearLocalFlyerPreview();
 });
@@ -524,7 +722,7 @@ onBeforeUnmount(() => {
 }
 
 .form-section + .form-section {
-  border-top: 1px solid rgba(47, 36, 36, 0.06);
+  border-top: 1px solid var(--rqst-border);
   padding-top: 24px;
 }
 
@@ -547,13 +745,50 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.start-time-input-wrap {
+  position: relative;
+}
+
+.start-time-input {
+  padding-right: 96px;
+}
+
+.start-now-btn {
+  background: var(--rqst-coral);
+  border: 0;
+  border-radius: 999px;
+  color: #fff9f7;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  padding: 6px 10px;
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  transition:
+    background 0.18s ease,
+    transform 0.18s ease;
+  white-space: nowrap;
+}
+
+.start-now-btn:hover {
+  background: color-mix(in srgb, var(--rqst-coral) 88%, #000 12%);
+  transform: translateY(calc(-50% - 1px));
+}
+
 .place-search-status {
   font-size: 0.92rem;
 }
 
 .place-results {
+  background: var(--rqst-surface-elevated);
   border: 1px solid var(--rqst-border);
   border-radius: var(--rqst-radius-sm);
+  box-shadow: var(--rqst-shadow-soft);
   display: grid;
   gap: 0;
   list-style: none;
@@ -563,9 +798,10 @@ onBeforeUnmount(() => {
 }
 
 .place-result-button {
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--rqst-input-bg);
   border: 0;
-  border-bottom: 1px solid rgba(47, 36, 36, 0.06);
+  border-bottom: 1px solid var(--rqst-border);
+  color: var(--rqst-ink);
   display: grid;
   gap: 4px;
   padding: 12px 14px;
@@ -578,7 +814,7 @@ onBeforeUnmount(() => {
 }
 
 .place-result-button:hover {
-  background: rgba(171, 220, 207, 0.28);
+  background: color-mix(in srgb, var(--rqst-mint) 18%, var(--rqst-input-bg));
 }
 
 .place-result-header {
@@ -589,6 +825,7 @@ onBeforeUnmount(() => {
 }
 
 .place-result-name {
+  color: var(--rqst-ink);
   font-weight: 800;
 }
 
@@ -603,12 +840,12 @@ onBeforeUnmount(() => {
 }
 
 .place-result-source-db {
-  background: rgba(171, 220, 207, 0.45);
+  background: color-mix(in srgb, var(--rqst-mint) 42%, transparent);
   color: #24564a;
 }
 
 .place-result-source-online {
-  background: rgba(135, 168, 216, 0.28);
+  background: color-mix(in srgb, var(--rqst-blue) 28%, transparent);
   color: var(--rqst-blue-dark);
 }
 
@@ -660,89 +897,371 @@ onBeforeUnmount(() => {
   width: fit-content;
 }
 
+.shows-filter-tabs {
+  width: fit-content;
+}
+
+.add-show-btn {
+  border-radius: 999px;
+  flex-shrink: 0;
+  font-size: 0.84rem;
+  line-height: 1.1;
+  min-height: 0;
+  padding: 7px 18px;
+}
+
 .shows-list {
   display: grid;
   gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 
-.show-card-layout {
-  display: grid;
-  gap: 18px;
-  grid-template-columns: auto minmax(0, 1fr);
-}
-
-.show-flyer {
-  border-radius: var(--rqst-radius-sm);
-  height: 180px;
+.show-card {
+  background: var(--rqst-surface-elevated);
+  border: 1.5px solid var(--rqst-border);
+  border-radius: 20px;
+  box-shadow: var(--rqst-shadow-soft);
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
   overflow: hidden;
-  width: 132px;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
 }
 
-.show-flyer img {
+.show-card:hover {
+  box-shadow: var(--rqst-shadow);
+  transform: translateY(-2px);
+}
+
+.show-card--live {
+  border-color: rgba(224, 90, 71, 0.34);
+  box-shadow: 0 12px 28px rgba(224, 90, 71, 0.12);
+}
+
+.show-card--upcoming {
+  border-color: rgba(169, 217, 207, 0.28);
+}
+
+.show-card--ended {
+  background: color-mix(in srgb, var(--rqst-surface-elevated) 82%, var(--rqst-surface-muted));
+  border-color: color-mix(in srgb, var(--rqst-border) 70%, var(--rqst-slate) 30%);
+}
+
+.show-card--ended:hover {
+  transform: none;
+}
+
+.show-card-media {
+  background:
+    linear-gradient(135deg, rgba(76, 95, 125, 0.18), rgba(135, 168, 216, 0.22)),
+    var(--rqst-surface-muted);
+  flex-shrink: 0;
+  height: 88px;
+  overflow: hidden;
+  position: relative;
+}
+
+.show-flyer-image {
   height: 100%;
   object-fit: cover;
   width: 100%;
 }
 
-.show-card-header {
-  align-items: flex-start;
+.show-flyer-fallback {
+  align-items: center;
+  color: var(--rqst-ink);
   display: flex;
-  gap: 16px;
-  justify-content: space-between;
+  flex-direction: row;
+  gap: 8px;
+  height: 100%;
+  justify-content: center;
+  line-height: 1;
+}
+
+.show-flyer-month {
+  color: var(--rqst-coral);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.show-flyer-day {
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.show-status-pill {
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  left: 12px;
+  letter-spacing: 0.05em;
+  padding: 5px 10px;
+  position: absolute;
+  text-transform: uppercase;
+  top: 12px;
+}
+
+.show-status-pill--upcoming {
+  background: rgba(169, 217, 207, 0.88);
+  border-color: rgba(34, 92, 77, 0.18);
+  color: #1f5f50;
+}
+
+.show-status-pill--live {
+  background: rgba(224, 90, 71, 0.92);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: #fff9f7;
+}
+
+.show-status-pill--ended {
+  background: rgba(76, 95, 125, 0.82);
+  border-color: rgba(186, 210, 240, 0.28);
+  color: #eef4fc;
+}
+
+.show-card-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+.show-card-copy {
+  display: grid;
+  gap: 6px;
 }
 
 .show-date {
   color: var(--rqst-coral);
-  font-size: 0.82rem;
+  font-size: 0.72rem;
   font-weight: 800;
-  letter-spacing: 0.04em;
-  margin-bottom: 6px;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
 .show-title {
-  font-size: 1.5rem;
-  margin: 0 0 6px;
+  font-size: 1.12rem;
+  line-height: 1.25;
+  margin: 0;
 }
 
 .show-venue {
-  font-size: 1.02rem;
+  font-size: 0.92rem;
   font-weight: 800;
 }
 
-.show-address,
-.show-description {
+.show-address {
   color: var(--rqst-ink-muted);
-  margin-top: 8px;
+  font-size: 0.84rem;
 }
 
-.show-card-actions {
-  display: flex;
-  flex-shrink: 0;
-  gap: 8px;
+.show-description {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--rqst-ink-muted);
+  display: -webkit-box;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  margin: 2px 0 0;
+  overflow: hidden;
+}
+
+.show-card-footer {
+  display: grid;
+  gap: 12px;
+  margin-top: auto;
 }
 
 .show-meta {
   display: flex;
   flex-wrap: wrap;
+  gap: 6px;
+}
+
+.show-meta-chip {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 5px 10px;
+}
+
+.show-meta-chip--live {
+  background: rgba(169, 217, 207, 0.18);
+  border-color: rgba(169, 217, 207, 0.34);
+  color: #225c4d;
+}
+
+.show-meta-chip--ended {
+  background: rgba(76, 95, 125, 0.14);
+  border-color: rgba(76, 95, 125, 0.28);
+  color: #4c5f7d;
+}
+
+.show-meta-chip--ticket {
+  background: rgba(224, 90, 71, 0.12);
+  border-color: rgba(224, 90, 71, 0.28);
+  color: #b73524;
+  transition:
+    background 0.18s ease,
+    transform 0.18s ease;
+}
+
+.show-meta-chip--ticket:hover {
+  background: rgba(224, 90, 71, 0.2);
+  transform: translateY(-1px);
+}
+
+.show-action-bar {
+  border-top: 1px solid var(--rqst-border);
+  display: grid;
   gap: 8px;
-  margin-top: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-top: 12px;
+}
+
+.show-action {
+  background: var(--rqst-btn-secondary-bg);
+  border: 1px solid var(--rqst-border);
+  border-radius: 12px;
+  color: var(--rqst-ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 9px 12px;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.show-action:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.show-action--edit:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rqst-mint) 18%, var(--rqst-btn-secondary-bg));
+  border-color: color-mix(in srgb, var(--rqst-mint) 40%, var(--rqst-border));
+}
+
+.show-action--delete {
+  color: #b73524;
+}
+
+.show-action--delete:hover:not(:disabled) {
+  background: rgba(224, 90, 71, 0.1);
+  border-color: rgba(224, 90, 71, 0.28);
+}
+
+.show-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .empty-state {
   display: grid;
   gap: 8px;
+  grid-column: 1 / -1;
+}
+
+:global([data-theme="dark"]) .show-card--ended {
+  background: color-mix(in srgb, var(--rqst-surface-elevated) 72%, #243247);
+  border-color: rgba(155, 184, 220, 0.22);
+}
+
+:global([data-theme="dark"]) .show-status-pill--ended {
+  background: rgba(107, 159, 212, 0.78);
+  border-color: rgba(186, 210, 240, 0.34);
+  color: #f0f6fc;
+}
+
+:global([data-theme="dark"]) .show-meta-chip--ended {
+  background: rgba(107, 159, 212, 0.16);
+  border-color: rgba(155, 184, 220, 0.34);
+  color: #c8daf0;
+}
+
+:global([data-theme="dark"]) .show-meta-chip--live {
+  background: rgba(122, 184, 168, 0.16);
+  border-color: rgba(122, 184, 168, 0.34);
+  color: #9ed9c8;
+}
+
+:global([data-theme="dark"]) .show-status-pill--upcoming {
+  background: rgba(122, 184, 168, 0.88);
+  border-color: rgba(34, 92, 77, 0.24);
+  color: #0f3f34;
+}
+
+:global([data-theme="dark"]) .show-action--delete {
+  color: #ff8f82;
+}
+
+:global([data-theme="dark"]) .show-action--delete:hover:not(:disabled) {
+  background: rgba(224, 90, 71, 0.18);
+  border-color: rgba(255, 143, 130, 0.34);
+}
+
+:global([data-theme="dark"]) .show-meta-chip--ticket {
+  background: rgba(224, 90, 71, 0.18);
+  border-color: rgba(255, 143, 130, 0.28);
+  color: #ff9f92;
+}
+
+:global([data-theme="dark"]) .show-card--ended .show-title,
+:global([data-theme="dark"]) .show-card--ended .show-venue {
+  color: #d8e6f4;
+}
+
+:global([data-theme="dark"]) .show-card--ended .show-date {
+  color: #ff9f92;
+}
+
+:global([data-theme="dark"]) .show-card--ended .show-address,
+:global([data-theme="dark"]) .show-card--ended .show-description {
+  color: rgba(200, 218, 240, 0.72);
+}
+
+:global([data-theme="dark"]) .show-flyer-fallback {
+  color: #d8e6f4;
+}
+
+:global([data-theme="dark"]) .place-result-source-db {
+  background: rgba(122, 184, 168, 0.22);
+  color: #9ed9c8;
+}
+
+:global([data-theme="dark"]) .place-result-source-online {
+  background: rgba(107, 159, 212, 0.22);
+  color: #c8daf0;
+}
+
+:global([data-theme="dark"]) .place-result-button:hover {
+  background: color-mix(in srgb, var(--rqst-blue) 16%, var(--rqst-input-bg));
 }
 
 @media (max-width: 980px) {
   .form-grid-two,
-  .form-grid-three,
-  .show-card-layout {
+  .form-grid-three {
     grid-template-columns: 1fr;
   }
 
-  .show-card-header {
-    flex-direction: column;
+  .shows-filter-tabs,
+  .shows-list {
+    width: 100%;
+  }
+
+  .shows-list {
+    grid-template-columns: 1fr;
   }
 }
 </style>

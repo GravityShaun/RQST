@@ -2,7 +2,7 @@ import { Stack } from "expo-router";
 import { LogBox } from "react-native";
 
 import { AppProviders } from "../src/lib/providers";
-import { premiumTheme } from "../src/components/premium-ui";
+import { usePremiumTheme } from "../src/store/theme";
 
 LogBox.ignoreLogs([
   "has a shadow set but cannot calculate shadow efficiently",
@@ -12,15 +12,23 @@ LogBox.ignoreLogs([
   "Skia",
 ]);
 
+function RootNavigator() {
+  const theme = usePremiumTheme();
+
+  return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: theme.colors.background },
+      }}
+    />
+  );
+}
+
 export default function RootLayout() {
   return (
     <AppProviders>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: premiumTheme.colors.background },
-        }}
-      />
+      <RootNavigator />
     </AppProviders>
   );
 }
