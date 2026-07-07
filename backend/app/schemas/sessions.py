@@ -38,4 +38,6 @@ class SessionRead(APIModel):
     started_at: datetime | None = None
     paused_at: datetime | None = None
     ended_at: datetime | None = None
+    event_name: str | None = None
+    event_starts_at: datetime | None = None
 

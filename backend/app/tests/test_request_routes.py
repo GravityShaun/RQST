@@ -14,6 +14,7 @@ from app.main import app
 from app.models import (
     DJProfile,
     DJSession,
+    Event,
     Payment,
     RequestStatus,
     SessionStatus,
@@ -178,7 +179,69 @@ def test_create_request_persists_payment_contribution_and_returns_metadata(
     assert payment is not None
     assert request.status == RequestStatus.PENDING_PAYMENT
     assert request.total_amount_cents == 0
+    assert request.event_id is None
     assert payment.gross_amount_cents == 900
+
+
+def test_create_request_records_event_id_for_show(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    world = seed_request_world(db_session)
+    listener = world["listener"]
+    session = world["session"]
+    song = world["song"]
+    profile = world["profile"]
+    venue = world["venue"]
+
+    event = Event(
+        dj_profile_id=profile.id,
+        venue_id=venue.id,
+        name="Friday Night Set",
+        starts_at=datetime.now(UTC) - timedelta(minutes=10),
+        ends_at=None,
+    )
+    db_session.add(event)
+    session.event_id = event.id
+    db_session.commit()
+
+    response = client.post(
+        f"/api/v1/sessions/{session.id}/requests",
+        json={"song_id": song.id, "amount_cents": 900},
+        headers=auth_headers(listener),
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["event_id"] == event.id
+    assert body["event_name"] == "Friday Night Set"
+
+    request = db_session.get(SongRequest, body["id"])
+    assert request is not None
+    assert request.event_id == event.id
+
+
+def test_create_request_rejects_ended_session(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    world = seed_request_world(db_session)
+    listener = world["listener"]
+    session = world["session"]
+    song = world["song"]
+
+    session.status = SessionStatus.ENDED
+    session.accepting_requests = False
+    db_session.commit()
+
+    response = client.post(
+        f"/api/v1/sessions/{session.id}/requests",
+        json={"song_id": song.id, "amount_cents": 900},
+        headers=auth_headers(listener),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Session not accepting requests"
 
 
 def test_create_request_persists_song_snapshot_and_returns_it_in_session_list(
@@ -234,6 +297,74 @@ def test_create_request_persists_song_snapshot_and_returns_it_in_session_list(
     assert list_item["song_title"] == "Midnight City"
     assert list_item["song_album_art_url"] == "https://example.com/midnight-city.jpg"
     assert list_item["note"] == "Happy birthday from table seven"
+
+
+def test_session_queue_excludes_played_and_filters_by_event(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    world = seed_request_world(db_session)
+    listener = world["listener"]
+    session = world["session"]
+    song = world["song"]
+    profile = world["profile"]
+    venue = world["venue"]
+
+    event = Event(
+        dj_profile_id=profile.id,
+        venue_id=venue.id,
+        name="Friday Night Set",
+        starts_at=datetime.now(UTC) - timedelta(minutes=10),
+        ends_at=None,
+    )
+    db_session.add(event)
+    session.event_id = event.id
+    db_session.commit()
+
+    create_response = client.post(
+        f"/api/v1/sessions/{session.id}/requests",
+        json={"song_id": song.id, "amount_cents": 900},
+        headers=auth_headers(listener),
+    )
+    assert create_response.status_code == 201
+    request_id = create_response.json()["id"]
+
+    request = db_session.get(SongRequest, request_id)
+    assert request is not None
+    request.status = RequestStatus.PLAYED
+    db_session.commit()
+
+    queue_response = client.get(f"/api/v1/sessions/{session.id}/requests")
+    assert queue_response.status_code == 200
+    assert queue_response.json() == []
+
+
+def test_session_requests_returns_empty_queue_when_session_ended(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    world = seed_request_world(db_session)
+    listener = world["listener"]
+    session = world["session"]
+    song = world["song"]
+
+    create_response = client.post(
+        f"/api/v1/sessions/{session.id}/requests",
+        json={"song_id": song.id, "amount_cents": 900},
+        headers=auth_headers(listener),
+    )
+    assert create_response.status_code == 201
+
+    live_response = client.get(f"/api/v1/sessions/{session.id}/requests")
+    assert live_response.status_code == 200
+    assert len(live_response.json()) == 1
+
+    session.status = SessionStatus.ENDED
+    db_session.commit()
+
+    ended_response = client.get(f"/api/v1/sessions/{session.id}/requests")
+    assert ended_response.status_code == 200
+    assert ended_response.json() == []
 
 
 def test_me_requests_returns_only_current_users_requests(
@@ -590,3 +721,42 @@ def test_undo_request_after_dj_confirm_is_rejected(
 
     assert undo_response.status_code == 409
     assert undo_response.json()["detail"] == "DJ already confirmed this request"
+
+
+def test_reset_current_session_queue_clears_open_and_inactive_requests(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    world = seed_request_world(db_session)
+    listener = world["listener"]
+    dj_user = world["dj_user"]
+    session = world["session"]
+    song = world["song"]
+
+    create_response = client.post(
+        f"/api/v1/sessions/{session.id}/requests",
+        json={"song_id": song.id, "amount_cents": 900},
+        headers=auth_headers(listener),
+    )
+    assert create_response.status_code == 201
+    request_id = create_response.json()["id"]
+
+    cancel_response = client.post(
+        f"/api/v1/requests/{request_id}/undo",
+        headers=auth_headers(listener),
+    )
+    assert cancel_response.status_code == 200
+
+    reset_response = client.post(
+        "/api/v1/dj/sessions/current/queue/reset",
+        headers=auth_headers(dj_user),
+    )
+    assert reset_response.status_code == 200
+    assert reset_response.json()["message"] == "Live queue cleared"
+
+    queue_response = client.get(f"/api/v1/sessions/{session.id}/requests")
+    assert queue_response.status_code == 200
+    assert queue_response.json() == []
+
+    remaining = db_session.get(SongRequest, request_id)
+    assert remaining is None

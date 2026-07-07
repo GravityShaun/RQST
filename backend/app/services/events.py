@@ -1,11 +1,63 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Event, Venue
 from app.schemas.events import EventRead
 from app.schemas.venues import VenueCreate, VenueRead
+
+SHOW_MAX_DURATION_HOURS = 8
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _max_event_end(starts_at: datetime) -> datetime:
+    return _as_utc(starts_at) + timedelta(hours=SHOW_MAX_DURATION_HOURS)
+
+
+def extend_event_end(event: Event, extend_minutes: int, *, now: datetime | None = None) -> datetime:
+    """Push a live show's end time forward and return the new end timestamp."""
+    if extend_minutes <= 0:
+        raise ValueError("Extension must be greater than zero minutes.")
+
+    current = now or _now()
+    starts_at = _as_utc(event.starts_at)
+    max_end = _max_event_end(starts_at)
+
+    if event.ends_at is None:
+        base_end = max(current, starts_at)
+    else:
+        base_end = max(_as_utc(event.ends_at), current)
+
+    if base_end >= max_end:
+        raise ValueError("This show is already at the maximum duration.")
+
+    proposed_end = base_end + timedelta(minutes=extend_minutes)
+    new_end = min(proposed_end, max_end)
+
+    if new_end <= base_end:
+        raise ValueError("This show is already at the maximum duration.")
+
+    event.ends_at = new_end
+    return new_end
+
+
+def end_event_now(event: Event, *, now: datetime | None = None) -> datetime:
+    """End a show immediately."""
+    ended_at = now or _now()
+    event.ends_at = ended_at
+    return ended_at
 
 
 def serialize_venue(venue: Venue) -> VenueRead:

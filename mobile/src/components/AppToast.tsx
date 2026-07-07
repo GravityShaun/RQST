@@ -3,6 +3,7 @@ import { ActivityIndicator, Animated, Easing, PanResponder, Pressable, StyleShee
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
+import { ConfettiOverlay } from "./ConfettiOverlay";
 import { premiumTheme } from "./premium-ui";
 import { useToastStore } from "../store/toast";
 
@@ -102,7 +103,9 @@ export function AppToast() {
   }
 
   return (
-    <View pointerEvents="box-none" style={[styles.container, { top: insets.top + 12 }]}>
+    <>
+      {toast.showConfetti ? <ConfettiOverlay burstKey={toast.id} /> : null}
+      <View pointerEvents="box-none" style={[styles.container, { top: insets.top + 12 }]}>
       <Animated.View style={{ opacity, transform: [{ translateY }] }} {...panResponder.panHandlers}>
         <View accessibilityRole="alert" style={styles.toast}>
           <View style={styles.iconWrap}>
@@ -135,6 +138,7 @@ export function AppToast() {
         </View>
       </Animated.View>
     </View>
+    </>
   );
 }
 

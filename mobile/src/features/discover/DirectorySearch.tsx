@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, router, type Href } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { apiRoutes } from "@rqst/contracts";
 import {
@@ -15,7 +15,9 @@ import {
   type ViewStyle,
 } from "react-native";
 
-import { SurfaceCard, premiumTheme } from "../../components/premium-ui";
+import { SurfaceCard } from "../../components/premium-ui";
+import { type PremiumTheme } from "../../lib/theme";
+import { usePremiumTheme, useThemedStyles } from "../../store/theme";
 import {
   listDiscoverDjs,
   listDiscoverVenues,
@@ -23,6 +25,7 @@ import {
   type DiscoverVenue,
 } from "../../lib/discover-api";
 import { rqstApi } from "../../lib/rqst-api";
+import { NEARBY_SESSIONS_QUERY_KEY } from "../../lib/use-active-session";
 import { useAppStore } from "../../store/app";
 
 type ViewMode = "search" | "browse";
@@ -46,6 +49,228 @@ const COPY = {
   emptyLiveBrowse: "No live DJs, artists, or venues match that filter yet.",
 } as const;
 
+function createDirectorySearchStyles(activeTheme: PremiumTheme) {
+  return StyleSheet.create({
+  emptyState: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 14,
+    lineHeight: 20,
+    paddingVertical: 8,
+  },
+  listAction: {
+    alignItems: "center",
+    backgroundColor: "rgba(224, 90, 71, 0.08)",
+    borderRadius: 16,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  listActionActive: {
+    backgroundColor: activeTheme.colors.coral,
+  },
+  resultAvatar: {
+    borderColor: "rgba(255,255,255,0.72)",
+    borderRadius: 18,
+    borderWidth: 1,
+    height: 44,
+    width: 44,
+  },
+  resultCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  resultActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexShrink: 0,
+    gap: 6,
+  },
+  resultActionButton: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.surface,
+    borderColor: activeTheme.colors.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  resultActionButtonPrimary: {
+    backgroundColor: activeTheme.colors.coral,
+    borderColor: activeTheme.colors.coral,
+  },
+  resultActionText: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  resultActionTextPrimary: {
+    color: "#FFFFFF",
+  },
+  playingSoonButton: {
+    alignItems: "center",
+    backgroundColor: "#2F5FBE",
+    borderColor: "#2F5FBE",
+    borderRadius: 999,
+    borderWidth: 1,
+    justifyContent: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  playingSoonText: {
+    color: "#FFFFFF",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  resultRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    paddingVertical: 10,
+  },
+  resultRowDisabled: {
+    opacity: 0.55,
+  },
+  resultSection: {
+    gap: 2,
+  },
+  resultSectionLabel: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    marginBottom: 2,
+    marginTop: 4,
+    textTransform: "uppercase",
+  },
+  resultSubtitle: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  resultTitle: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 17,
+    fontWeight: "700",
+    lineHeight: 22,
+  },
+  resultsCard: {
+    gap: 4,
+  },
+  resultsCardOverlay: {
+    maxHeight: 280,
+  },
+  resultsCount: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  resultsEyebrow: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1.1,
+    textTransform: "uppercase",
+  },
+  resultsHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  resultsScrollOverlay: {
+    maxHeight: 220,
+  },
+  searchField: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.surfaceElevated,
+    borderColor: activeTheme.colors.border,
+    borderRadius: activeTheme.radii.md,
+    borderWidth: 1.5,
+    flex: 1,
+    flexDirection: "row",
+    gap: 14,
+    padding: 12,
+    shadowColor: activeTheme.colors.shadow,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.1,
+    shadowRadius: 22,
+  },
+  searchFieldOverlay: {
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+  },
+  searchIcon: {
+    alignItems: "center",
+    backgroundColor: "rgba(224, 90, 71, 0.08)",
+    borderRadius: 16,
+    borderColor: "rgba(224, 90, 71, 0.14)",
+    borderWidth: 1,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  searchInput: {
+    color: activeTheme.colors.ink,
+    flex: 1,
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 15,
+    fontWeight: "600",
+    minHeight: 44,
+    paddingVertical: 0,
+  },
+  searchRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 12,
+  },
+  togglePill: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.surface,
+    borderColor: activeTheme.colors.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "center",
+    minHeight: 42,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  togglePillActive: {
+    backgroundColor: activeTheme.colors.coral,
+    borderColor: activeTheme.colors.coral,
+  },
+  togglePillText: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  togglePillTextActive: {
+    color: "#FFFFFF",
+  },
+  toggleRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  wrap: {
+    gap: 12,
+  },
+  });
+}
+
 function DjResultRow({
   dj,
   onLiveSessionSelected,
@@ -57,6 +282,9 @@ function DjResultRow({
   hideActions?: boolean;
   selectOnly?: boolean;
 }) {
+  const theme = usePremiumTheme();
+  const styles = useThemedStyles(createDirectorySearchStyles);
+  const queryClient = useQueryClient();
   const setSelectedSession = useAppStore((state) => state.setSelectedSession);
 
   function openQueue() {
@@ -64,6 +292,7 @@ function DjResultRow({
       return;
     }
 
+    void queryClient.invalidateQueries({ queryKey: NEARBY_SESSIONS_QUERY_KEY });
     setSelectedSession({
       sessionId: dj.liveSessionId,
       djName: dj.artistName,
@@ -93,7 +322,7 @@ function DjResultRow({
             {dj.detail}
           </Text>
         </View>
-        {canSelect ? <Ionicons color={premiumTheme.colors.muted} name="chevron-forward" size={18} /> : null}
+        {canSelect ? <Ionicons color={theme.colors.inkMuted} name="chevron-forward" size={18} /> : null}
       </Pressable>
     );
   }
@@ -110,7 +339,7 @@ function DjResultRow({
       <View style={styles.resultActions}>
         <Link href={`/dj?slug=${encodeURIComponent(dj.slug)}` as Href} asChild>
           <Pressable accessibilityLabel={`Open ${dj.artistName} profile`} style={styles.resultActionButton}>
-            <Ionicons color={premiumTheme.colors.ink} name="person-outline" size={12} />
+            <Ionicons color={theme.colors.ink} name="person-outline" size={12} />
             <Text style={styles.resultActionText}>Profile</Text>
           </Pressable>
         </Link>
@@ -140,6 +369,9 @@ function VenueResultRow({
   venue: DiscoverVenue;
   onVenuePress?: (venue: DiscoverVenue) => void;
 }) {
+  const theme = usePremiumTheme();
+  const styles = useThemedStyles(createDirectorySearchStyles);
+
   if (onVenuePress) {
     return (
       <Pressable onPress={() => onVenuePress(venue)} style={styles.resultRow}>
@@ -150,7 +382,7 @@ function VenueResultRow({
             {venue.detail}
           </Text>
         </View>
-        <Ionicons color={premiumTheme.colors.muted} name="chevron-forward" size={18} />
+        <Ionicons color={theme.colors.inkMuted} name="chevron-forward" size={18} />
       </Pressable>
     );
   }
@@ -165,7 +397,7 @@ function VenueResultRow({
             {venue.detail}
           </Text>
         </View>
-        <Ionicons color={premiumTheme.colors.muted} name="chevron-forward" size={18} />
+        <Ionicons color={theme.colors.inkMuted} name="chevron-forward" size={18} />
       </Pressable>
     </Link>
   );
@@ -194,6 +426,9 @@ export function DirectorySearch({
   onLiveSessionSelected,
   style,
 }: DirectorySearchProps) {
+  const theme = usePremiumTheme();
+  const styles = useThemedStyles(createDirectorySearchStyles);
+  const queryClient = useQueryClient();
   const setSelectedSession = useAppStore((state) => state.setSelectedSession);
   const [viewMode, setViewMode] = useState<ViewMode>(defaultViewMode);
   const [browseTab, setBrowseTab] = useState<BrowseTab>("djs");
@@ -222,7 +457,7 @@ export function DirectorySearch({
     refetchOnMount: "always",
   });
   const liveSessionsQuery = useQuery({
-    queryKey: ["liveSessions"],
+    queryKey: NEARBY_SESSIONS_QUERY_KEY,
     queryFn: () =>
       rqstApi<LiveSessionSummary[]>(apiRoutes.sessionsNearby.replace("/api/v1", ""), { auth: false }),
     enabled: liveOnly && shouldFetch,
@@ -283,6 +518,7 @@ export function DirectorySearch({
         venueName: venue.name,
         slug: dj.slug,
       });
+      void queryClient.invalidateQueries({ queryKey: NEARBY_SESSIONS_QUERY_KEY });
       onLiveSessionSelected?.();
       return;
     }
@@ -330,7 +566,7 @@ export function DirectorySearch({
       <View style={styles.searchRow}>
         <View style={[styles.searchField, isOverlay && styles.searchFieldOverlay]}>
           <View style={styles.searchIcon}>
-            <Ionicons color={premiumTheme.colors.ink} name="search" size={18} />
+            <Ionicons color={theme.colors.ink} name="search" size={18} />
           </View>
           <TextInput
             autoCapitalize="none"
@@ -338,7 +574,7 @@ export function DirectorySearch({
             clearButtonMode="while-editing"
             onChangeText={setQuery}
             placeholder={viewMode === "browse" ? filterPlaceholder : searchPlaceholder}
-            placeholderTextColor={premiumTheme.colors.inkMuted}
+            placeholderTextColor={theme.colors.inkMuted}
             style={styles.searchInput}
             value={query}
           />
@@ -349,7 +585,7 @@ export function DirectorySearch({
             style={[styles.listAction, viewMode === "browse" && styles.listActionActive]}
           >
             <Ionicons
-              color={viewMode === "browse" ? "#FFFFFF" : premiumTheme.colors.ink}
+              color={viewMode === "browse" ? "#FFFFFF" : theme.colors.ink}
               name={viewMode === "browse" ? "list" : "list-outline"}
               size={18}
             />
@@ -366,7 +602,7 @@ export function DirectorySearch({
             style={[styles.togglePill, browseTab === "djs" && styles.togglePillActive]}
           >
             <Ionicons
-              color={browseTab === "djs" ? "#FFFFFF" : premiumTheme.colors.ink}
+              color={browseTab === "djs" ? "#FFFFFF" : theme.colors.ink}
               name="musical-notes-outline"
               size={14}
             />
@@ -380,7 +616,7 @@ export function DirectorySearch({
             style={[styles.togglePill, browseTab === "venues" && styles.togglePillActive]}
           >
             <Ionicons
-              color={browseTab === "venues" ? "#FFFFFF" : premiumTheme.colors.ink}
+              color={browseTab === "venues" ? "#FFFFFF" : theme.colors.ink}
               name="business-outline"
               size={14}
             />
@@ -437,223 +673,3 @@ export function DirectorySearch({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  emptyState: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 14,
-    lineHeight: 20,
-    paddingVertical: 8,
-  },
-  listAction: {
-    alignItems: "center",
-    backgroundColor: "rgba(224, 90, 71, 0.08)",
-    borderRadius: 16,
-    height: 44,
-    justifyContent: "center",
-    width: 44,
-  },
-  listActionActive: {
-    backgroundColor: premiumTheme.colors.coral,
-  },
-  resultAvatar: {
-    borderColor: "rgba(255,255,255,0.72)",
-    borderRadius: 18,
-    borderWidth: 1,
-    height: 44,
-    width: 44,
-  },
-  resultCopy: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0,
-  },
-  resultActions: {
-    alignItems: "center",
-    flexDirection: "row",
-    flexShrink: 0,
-    gap: 6,
-  },
-  resultActionButton: {
-    alignItems: "center",
-    backgroundColor: "#F7F5F2",
-    borderColor: premiumTheme.colors.border,
-    borderRadius: 999,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  resultActionButtonPrimary: {
-    backgroundColor: premiumTheme.colors.coral,
-    borderColor: premiumTheme.colors.coral,
-  },
-  resultActionText: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 9,
-    fontWeight: "700",
-  },
-  resultActionTextPrimary: {
-    color: "#FFFFFF",
-  },
-  playingSoonButton: {
-    alignItems: "center",
-    backgroundColor: "#2F5FBE",
-    borderColor: "#2F5FBE",
-    borderRadius: 999,
-    borderWidth: 1,
-    justifyContent: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  playingSoonText: {
-    color: "#FFFFFF",
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 9,
-    fontWeight: "700",
-  },
-  resultRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    paddingVertical: 10,
-  },
-  resultRowDisabled: {
-    opacity: 0.55,
-  },
-  resultSection: {
-    gap: 2,
-  },
-  resultSectionLabel: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.8,
-    marginBottom: 2,
-    marginTop: 4,
-    textTransform: "uppercase",
-  },
-  resultSubtitle: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  resultTitle: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 17,
-    fontWeight: "700",
-    lineHeight: 22,
-  },
-  resultsCard: {
-    gap: 4,
-  },
-  resultsCardOverlay: {
-    maxHeight: 280,
-  },
-  resultsCount: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  resultsEyebrow: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1.1,
-    textTransform: "uppercase",
-  },
-  resultsHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 4,
-  },
-  resultsScrollOverlay: {
-    maxHeight: 220,
-  },
-  searchField: {
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderColor: premiumTheme.colors.border,
-    borderRadius: premiumTheme.radii.md,
-    borderWidth: 1.5,
-    flex: 1,
-    flexDirection: "row",
-    gap: 14,
-    padding: 12,
-    shadowColor: "#5A6575",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.1,
-    shadowRadius: 22,
-  },
-  searchFieldOverlay: {
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
-  },
-  searchIcon: {
-    alignItems: "center",
-    backgroundColor: "rgba(224, 90, 71, 0.08)",
-    borderRadius: 16,
-    borderColor: "rgba(224, 90, 71, 0.14)",
-    borderWidth: 1,
-    height: 44,
-    justifyContent: "center",
-    width: 44,
-  },
-  searchInput: {
-    color: premiumTheme.colors.ink,
-    flex: 1,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 15,
-    fontWeight: "600",
-    minHeight: 44,
-    paddingVertical: 0,
-  },
-  searchRow: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 12,
-  },
-  togglePill: {
-    alignItems: "center",
-    backgroundColor: "#F7F5F2",
-    borderColor: premiumTheme.colors.border,
-    borderRadius: 999,
-    borderWidth: 1,
-    flex: 1,
-    flexDirection: "row",
-    gap: 6,
-    justifyContent: "center",
-    minHeight: 42,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  togglePillActive: {
-    backgroundColor: premiumTheme.colors.coral,
-    borderColor: premiumTheme.colors.coral,
-  },
-  togglePillText: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  togglePillTextActive: {
-    color: "#FFFFFF",
-  },
-  toggleRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  wrap: {
-    gap: 12,
-  },
-});

@@ -16,10 +16,10 @@ import {
   type ViewStyle,
 } from "react-native";
 
+import { usePremiumTheme } from "../../store/theme";
 import { GRAINY_GRADIENT_SHADER } from "./conf";
 import { hexToRgba } from "./helper";
 import type { IGrainyGradient } from "./types";
-import { premiumTheme } from "../premium-ui";
 
 const METAL_MAX_TEXTURE_SIZE = 8192;
 
@@ -28,10 +28,7 @@ export type GrainyGradientProps = IGrainyGradient;
 export const GrainyGradient = memo(function GrainyGradient({
   width: paramsWidth,
   height: paramsHeight,
-  colors = [
-    premiumTheme.colors.background,
-    premiumTheme.colors.backgroundSecondary,
-  ],
+  colors,
   speed = 0.1,
   animated = false,
   intensity = 0.015,
@@ -39,9 +36,12 @@ export const GrainyGradient = memo(function GrainyGradient({
   enabled = true,
   amplitude = 0.005,
   brightness = 0.5,
-  grainColor = premiumTheme.colors.background,
+  grainColor,
   style,
 }: GrainyGradientProps) {
+  const theme = usePremiumTheme();
+  const resolvedColors = colors ?? [theme.colors.background, theme.colors.backgroundSecondary];
+  const resolvedGrainColor = grainColor ?? theme.colors.background;
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [layout, setLayout] = useState({ height: 0, width: 0 });
   const [time, setTime] = useState(0);
@@ -85,12 +85,12 @@ export const GrainyGradient = memo(function GrainyGradient({
   const parsedColors = useMemo(() => {
     const result: [number, number, number, number][] = [];
     for (let i = 0; i < 5; i++) {
-      result.push(i < colors.length ? hexToRgba(colors[i]!) : [0, 0, 0, 1]);
+      result.push(i < resolvedColors.length ? hexToRgba(resolvedColors[i]!) : [0, 0, 0, 1]);
     }
     return result;
-  }, [colors]);
+  }, [resolvedColors]);
 
-  const parsedGrainColor = useMemo(() => hexToRgba(grainColor), [grainColor]);
+  const parsedGrainColor = useMemo(() => hexToRgba(resolvedGrainColor), [resolvedGrainColor]);
 
   const uniforms = useMemo(
     () => ({
@@ -101,7 +101,7 @@ export const GrainyGradient = memo(function GrainyGradient({
       uColor2: parsedColors[2],
       uColor3: parsedColors[3],
       uColor4: parsedColors[4],
-      uColorCount: Math.min(colors.length, 5),
+      uColorCount: Math.min(resolvedColors.length, 5),
       uAmplitude: amplitude,
       uGrainIntensity: intensity,
       uGrainSize: size,
@@ -112,12 +112,12 @@ export const GrainyGradient = memo(function GrainyGradient({
     [
       amplitude,
       brightness,
-      colors.length,
       enabled,
       height,
       intensity,
       parsedColors,
       parsedGrainColor,
+      resolvedColors.length,
       size,
       time,
       width,
@@ -135,9 +135,9 @@ export const GrainyGradient = memo(function GrainyGradient({
 
   if (!animated) {
     const gradientColors = (
-      colors.filter(Boolean).length >= 2
-        ? colors.filter(Boolean)
-        : [colors[0] ?? premiumTheme.colors.background, premiumTheme.colors.backgroundSecondary]
+      resolvedColors.filter(Boolean).length >= 2
+        ? resolvedColors.filter(Boolean)
+        : [resolvedColors[0] ?? theme.colors.background, theme.colors.backgroundSecondary]
     ) as [string, string, ...string[]];
 
     return (
@@ -153,7 +153,13 @@ export const GrainyGradient = memo(function GrainyGradient({
   }
 
   if (!shader) {
-    return <View pointerEvents="none" onLayout={onLayout} style={[styles.container, style, styles.placeholder]} />;
+    return (
+      <View
+        pointerEvents="none"
+        onLayout={onLayout}
+        style={[styles.container, style, { backgroundColor: theme.colors.background }]}
+      />
+    );
   }
 
   return (
@@ -165,7 +171,7 @@ export const GrainyGradient = memo(function GrainyGradient({
           </Fill>
         </Canvas>
       ) : (
-        <View style={styles.placeholder} />
+        <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: theme.colors.background }} />
       )}
     </View>
   );
@@ -179,17 +185,23 @@ export const GrainyGradientBackground = memo(function GrainyGradientBackground({
   style,
   ...props
 }: GrainyGradientBackgroundProps) {
+  const theme = usePremiumTheme();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-  // Viewport-sized canvas only — avoid measuring scroll content height (Metal max 8192px).
   const width = Math.min(screenWidth + 240, METAL_MAX_TEXTURE_SIZE);
   const height = Math.min(screenHeight + 300, METAL_MAX_TEXTURE_SIZE);
 
-  return <GrainyGradient {...props} width={width} height={height} style={[styles.background, style]} />;
+  return (
+    <GrainyGradient
+      {...props}
+      width={width}
+      height={height}
+      style={[styles.background, { backgroundColor: theme.colors.background }, style]}
+    />
+  );
 });
 
 const styles = StyleSheet.create({
   background: {
-    backgroundColor: premiumTheme.colors.background,
     bottom: -180,
     left: -120,
     position: "absolute",
@@ -198,9 +210,5 @@ const styles = StyleSheet.create({
   },
   container: {
     overflow: "hidden",
-  },
-  placeholder: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: premiumTheme.colors.background,
   },
 });

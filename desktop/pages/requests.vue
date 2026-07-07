@@ -6,11 +6,21 @@
         <h1 style="margin: 0; font-size: 2.6rem">Ranked by live dollars</h1>
         <p v-if="pending" class="muted" style="margin: 8px 0 0">Loading live requests...</p>
         <p v-else-if="error" class="muted" style="margin: 8px 0 0">Could not reach the backend. Retrying every 30 seconds.</p>
+        <p v-else-if="resetError" class="muted" style="margin: 8px 0 0">{{ resetError }}</p>
         <p v-else-if="sessionId" class="muted" style="margin: 8px 0 0">Session #{{ sessionId }} · updates in real time</p>
       </div>
       <div style="text-align: right">
         <div class="metric">{{ totalRequested }}</div>
         <div class="muted">Requested tonight</div>
+        <button
+          class="btn btn-secondary"
+          type="button"
+          style="margin-top: 12px"
+          :disabled="pending || isResetting || !sessionId"
+          @click="handleResetQueue"
+        >
+          {{ isResetting ? "Clearing..." : "Clear queue" }}
+        </button>
       </div>
     </section>
 
@@ -56,7 +66,7 @@
 
 <script setup lang="ts">
 import QueueTable from "~/components/QueueTable.vue";
-import { useSessionQueue } from "~/composables/useSessionQueue";
+import { useSessionQueue, isActiveQueueStatus, type SessionRequest } from "~/composables/useSessionQueue";
 import { countUniqueContributors } from "~/utils/contributors";
 import { formatTimeAgo, parseApiDateTime } from "~/utils/datetime";
 
@@ -83,6 +93,8 @@ const activeTab = ref<RequestTab>("queued");
 const playTarget = ref<QueueRow | null>(null);
 const playError = ref("");
 const isPlaying = ref(false);
+const isResetting = ref(false);
+const resetError = ref("");
 const now = ref(Date.now());
 
 let timeAgoInterval: ReturnType<typeof setInterval> | undefined;
@@ -99,43 +111,49 @@ onUnmounted(() => {
   }
 });
 
-const { requests: backendRequests, pending, error, sessionId, markRequestPlayed } = useSessionQueue();
+const { requests: backendRequests, playedRequests, pending, error, sessionId, markRequestPlayed, resetQueue } = useSessionQueue();
+
+function toQueueRow(item: SessionRequest, rank: number): QueueRow {
+  return {
+    id: item.id,
+    rank,
+    title: item.song_title ?? `Request #${item.id}`,
+    artist: item.song_artist ?? "Unknown artist",
+    total: formatUsd(item.total_amount_cents || item.original_amount_cents),
+    amountCents: item.total_amount_cents || item.original_amount_cents,
+    contributors: countUniqueContributors(item.contributor_count, item.contributors),
+    rawStatus: item.status,
+    requestedAt: formatTimeAgo(item.created_at, now.value),
+  };
+}
 
 function formatUsd(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 }
 
+function sortByAmountAndCreatedAt(left: SessionRequest, right: SessionRequest) {
+  const amountSort = right.total_amount_cents - left.total_amount_cents;
+  if (amountSort !== 0) {
+    return amountSort;
+  }
+
+  const leftCreatedAt = parseApiDateTime(left.created_at)?.getTime() ?? 0;
+  const rightCreatedAt = parseApiDateTime(right.created_at)?.getTime() ?? 0;
+  return leftCreatedAt - rightCreatedAt;
+}
+
 const liveRows = computed<QueueRow[]>(() =>
   [...backendRequests.value]
-    .sort((left, right) => {
-      const amountSort = right.total_amount_cents - left.total_amount_cents;
-      if (amountSort !== 0) {
-        return amountSort;
-      }
-
-      const leftCreatedAt = parseApiDateTime(left.created_at)?.getTime() ?? 0;
-      const rightCreatedAt = parseApiDateTime(right.created_at)?.getTime() ?? 0;
-      return leftCreatedAt - rightCreatedAt;
-    })
-    .map((item, index) => ({
-      id: item.id,
-      rank: index + 1,
-      title: item.song_title ?? `Request #${item.id}`,
-      artist: item.song_artist ?? "Unknown artist",
-      total: formatUsd(item.total_amount_cents || item.original_amount_cents),
-      amountCents: item.total_amount_cents || item.original_amount_cents,
-      contributors: countUniqueContributors(item.contributor_count, item.contributors),
-      rawStatus: item.status,
-      requestedAt: formatTimeAgo(item.created_at, now.value),
-    })),
+    .sort(sortByAmountAndCreatedAt)
+    .map((item, index) => toQueueRow(item, index + 1)),
 );
 
 const queuedItems = computed(() =>
-  liveRows.value.filter((item) => item.rawStatus !== "played").map((item, index) => ({ ...item, rank: index + 1 })),
+  liveRows.value
+    .filter((item) => isActiveQueueStatus(item.rawStatus))
+    .map((item, index) => ({ ...item, rank: index + 1 })),
 );
-const playedItems = computed(() =>
-  liveRows.value.filter((item) => item.rawStatus === "played").map((item, index) => ({ ...item, rank: index + 1 })),
-);
+const playedItems = computed(() => playedRequests.value.map((item, index) => toQueueRow(item, index + 1)));
 
 const visibleItems = computed(() => {
   if (error.value) {
@@ -146,11 +164,16 @@ const visibleItems = computed(() => {
 });
 
 const totalRequested = computed(() => {
-  if (error.value || backendRequests.value.length === 0) {
+  if (error.value) {
     return formatUsd(0);
   }
 
-  const cents = backendRequests.value.reduce(
+  const allRequests = [...backendRequests.value, ...playedRequests.value];
+  if (allRequests.length === 0) {
+    return formatUsd(0);
+  }
+
+  const cents = allRequests.reduce(
     (total, request) => total + (request.total_amount_cents || request.original_amount_cents),
     0,
   );
@@ -182,10 +205,27 @@ async function confirmPlay() {
   try {
     await markRequestPlayed(playTarget.value.id, playTarget.value.rawStatus);
     playTarget.value = null;
+    activeTab.value = "played";
   } catch {
     playError.value = "Could not mark this song as played. Confirm the backend is running and try again.";
   } finally {
     isPlaying.value = false;
+  }
+}
+
+async function handleResetQueue() {
+  if (isResetting.value || !sessionId.value) {
+    return;
+  }
+
+  isResetting.value = true;
+  resetError.value = "";
+  try {
+    await resetQueue();
+  } catch {
+    resetError.value = "Could not clear the queue. Confirm the backend is running and try again.";
+  } finally {
+    isResetting.value = false;
   }
 }
 </script>

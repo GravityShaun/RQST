@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import {
   ActionRow,
+  ColorSchemePicker,
   FeatureTile,
   ScreenShell,
   SectionTitle,
@@ -11,11 +12,11 @@ import {
   StatPill,
   SurfaceCard,
   ToggleRow,
-  premiumTheme,
 } from "../../src/components/premium-ui";
 import { UserAvatar } from "../../src/components/UserAvatar";
 import { unsplashImages } from "../../src/lib/unsplash";
 import { useAuthStore } from "../../src/store/auth";
+import { usePremiumTheme, useThemedStyles } from "../../src/store/theme";
 
 export default function SettingsScreen() {
   const [pushEnabled, setPushEnabled] = useState(true);
@@ -23,6 +24,85 @@ export default function SettingsScreen() {
   const [locationSharing, setLocationSharing] = useState(true);
   const user = useAuthStore((state) => state.user);
   const signOut = useAuthStore((state) => state.signOut);
+  const theme = usePremiumTheme();
+  const styles = useThemedStyles((activeTheme) =>
+    StyleSheet.create({
+      logoutCopy: {
+        flex: 1,
+        gap: 2,
+      },
+      logoutIcon: {
+        alignItems: "center",
+        backgroundColor: "rgba(224, 90, 71, 0.14)",
+        borderColor: "rgba(224, 90, 71, 0.28)",
+        borderRadius: 14,
+        borderWidth: 1,
+        height: 40,
+        justifyContent: "center",
+        width: 40,
+      },
+      logoutRow: {
+        alignItems: "center",
+        borderColor: activeTheme.colors.border,
+        borderTopWidth: 1,
+        flexDirection: "row",
+        gap: 12,
+        marginTop: 8,
+        paddingTop: 16,
+      },
+      logoutSubtitle: {
+        color: activeTheme.colors.inkMuted,
+        fontFamily: activeTheme.fonts.body,
+        fontSize: 13,
+      },
+      logoutTitle: {
+        color: activeTheme.colors.coral,
+        fontFamily: activeTheme.fonts.body,
+        fontSize: 16,
+        fontWeight: "700",
+      },
+      metricRow: {
+        flexDirection: "row",
+        gap: 12,
+      },
+      pillRow: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap: 10,
+        justifyContent: "center",
+      },
+      profileCard: {
+        alignItems: "center",
+        backgroundColor: "#D95E4F",
+        borderColor: "rgba(255,255,255,0.24)",
+        borderRadius: 30,
+        borderWidth: 1,
+        overflow: "hidden",
+        padding: 24,
+      },
+      profileImage: {
+        borderRadius: 30,
+      },
+      profileMood: {
+        color: "rgba(255,249,247,0.82)",
+        fontFamily: activeTheme.fonts.body,
+        fontSize: 14,
+        marginTop: 6,
+        textAlign: "center",
+      },
+      profileName: {
+        color: activeTheme.colors.text,
+        fontFamily: activeTheme.fonts.display,
+        fontSize: 34,
+        fontWeight: "800",
+        marginTop: 16,
+      },
+      profileOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: "rgba(217, 94, 79, 0.46)",
+      },
+    }),
+  );
 
   async function handleSignOut() {
     await signOut();
@@ -46,6 +126,11 @@ export default function SettingsScreen() {
         <FeatureTile icon="card-outline" title="Payments" subtitle="Cards and receipts" value="Ready" tone="gold" />
         <FeatureTile icon="notifications-outline" title="Alerts" subtitle="Queue and room updates" value="Live" tone="mint" />
       </View>
+
+      <SectionTitle title="Appearance" subtitle="Light, dark, or match your device." />
+      <SurfaceCard>
+        <ColorSchemePicker />
+      </SurfaceCard>
 
       <SectionTitle title="Preferences" subtitle="Simple controls, cleaner layout." />
       <SurfaceCard>
@@ -93,13 +178,13 @@ export default function SettingsScreen() {
         <SettingsRow icon="card-outline" title="Payment methods" subtitle="Cards and billing history." value="2 saved" tone="gold" />
         <Pressable accessibilityRole="button" onPress={() => void handleSignOut()} style={styles.logoutRow}>
           <View style={styles.logoutIcon}>
-            <Ionicons color={premiumTheme.colors.coral} name="log-out-outline" size={18} />
+            <Ionicons color={theme.colors.coral} name="log-out-outline" size={18} />
           </View>
           <View style={styles.logoutCopy}>
             <Text style={styles.logoutTitle}>Log out</Text>
             <Text style={styles.logoutSubtitle}>Sign out of this device.</Text>
           </View>
-          <Ionicons color={premiumTheme.colors.coral} name="chevron-forward" size={18} />
+          <Ionicons color={theme.colors.coral} name="chevron-forward" size={18} />
         </Pressable>
       </SurfaceCard>
 
@@ -112,80 +197,3 @@ export default function SettingsScreen() {
     </ScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  logoutCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  logoutIcon: {
-    alignItems: "center",
-    backgroundColor: "rgba(224, 90, 71, 0.14)",
-    borderColor: "rgba(224, 90, 71, 0.28)",
-    borderRadius: 14,
-    borderWidth: 1,
-    height: 40,
-    justifyContent: "center",
-    width: 40,
-  },
-  logoutRow: {
-    alignItems: "center",
-    borderColor: premiumTheme.colors.border,
-    borderTopWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 8,
-    paddingTop: 16,
-  },
-  logoutSubtitle: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-  },
-  logoutTitle: {
-    color: premiumTheme.colors.coral,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  metricRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  pillRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    justifyContent: "center",
-  },
-  profileCard: {
-    alignItems: "center",
-    backgroundColor: "#D95E4F",
-    borderColor: "rgba(255,255,255,0.24)",
-    borderRadius: 30,
-    borderWidth: 1,
-    overflow: "hidden",
-    padding: 24,
-  },
-  profileImage: {
-    borderRadius: 30,
-  },
-  profileMood: {
-    color: "rgba(255,249,247,0.82)",
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 14,
-    marginTop: 6,
-    textAlign: "center",
-  },
-  profileName: {
-    color: premiumTheme.colors.text,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 34,
-    fontWeight: "800",
-    marginTop: 16,
-  },
-  profileOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(217, 94, 79, 0.46)",
-  },
-});

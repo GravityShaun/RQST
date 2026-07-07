@@ -126,6 +126,34 @@ def test_create_and_list_events(client: TestClient, db_session: Session) -> None
     assert venue.name == "Harbor Static"
 
 
+def test_create_event_without_name(client: TestClient, db_session: Session) -> None:
+    token, _ = _register_dj(client, "unnamed-show@example.com")
+    starts_at = datetime(2026, 9, 2, 20, 30, tzinfo=UTC).isoformat()
+
+    create_response = client.post(
+        "/api/v1/djs/events",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "starts_at": starts_at,
+            "venue": {
+                "name": "Late Room",
+                "address": "9 King St",
+                "city": "Charleston",
+                "state": "SC",
+                "country": "US",
+            },
+        },
+    )
+
+    assert create_response.status_code == 201
+    payload = create_response.json()
+    assert payload["name"] is None
+    assert payload["starts_at"] is not None
+
+    event = db_session.scalar(select(Event).where(Event.name.is_(None)))
+    assert event is not None
+
+
 def test_search_venue_suggestions_includes_database_venues(client: TestClient, monkeypatch) -> None:
     token, _ = _register_dj(client, "places@example.com")
 

@@ -17,24 +17,17 @@ import {
   useWindowDimensions,
 } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE, type MapStyleElement, type Region } from "react-native-maps";
+import { usePremiumTheme, useThemedStyles } from "../../src/store/theme";
 
 import {
   SectionTitle,
   StatPill,
   Tag,
-  VenueCard,
-  premiumTheme,
+  VenueCard, 
 } from "../../src/components/premium-ui";
 import { DirectorySearch } from "../../src/features/discover/DirectorySearch";
 import { nearbyVenues } from "../../src/features/rqst/mock-data";
 import type { DiscoverVenue } from "../../src/lib/discover-api";
-
-const drawerTone = {
-  gold: premiumTheme.colors.gold,
-  mint: premiumTheme.colors.mint,
-  coral: premiumTheme.colors.coral,
-  slate: premiumTheme.colors.slate,
-} as const;
 
 const CHARLESTON_REGION: Region = {
   latitude: 32.7765,
@@ -128,6 +121,188 @@ function regionFromCoordinates(latitude: number, longitude: number): Region {
 }
 
 export default function FindScreen() {
+  const theme = usePremiumTheme();
+  const styles = useThemedStyles((activeTheme) => {
+    const isDark = activeTheme.colors.background === "#0B1118";
+
+    return StyleSheet.create({
+circleButton: {
+    alignItems: "center",
+    backgroundColor: activeTheme.colors.surfaceElevated,
+    borderColor: activeTheme.colors.border,
+    borderRadius: 24,
+    borderWidth: 1,
+    height: 48,
+    justifyContent: "center",
+    shadowColor: "#5B6474",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    width: 48,
+  },
+  drawer: {
+    backgroundColor: isDark ? activeTheme.colors.surfaceElevated : "#EFECE9",
+    borderColor: activeTheme.colors.border,
+    borderTopLeftRadius: 34,
+    borderTopRightRadius: 34,
+    borderWidth: 1,
+    bottom: -32,
+    overflow: "hidden",
+    position: "absolute",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.28,
+    shadowRadius: 24,
+  },
+  drawerAction: {
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.14)",
+    borderRadius: 18,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  drawerContent: {
+    gap: 18,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+  },
+  drawerEyebrow: {
+    color: "rgba(223, 230, 240, 0.72)",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1.1,
+    textTransform: "uppercase",
+  },
+  drawerHandleArea: {
+    backgroundColor: "#4A5466",
+    paddingHorizontal: 20,
+    paddingTop: 10,
+  },
+  drawerPreview: {
+    gap: 16,
+    paddingBottom: 8,
+  },
+  drawerPreviewCopy: {
+    flex: 1,
+    gap: 6,
+  },
+  drawerPreviewRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+  },
+  drawerSubtitle: {
+    color: "rgba(223, 230, 240, 0.72)",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  drawerTitle: {
+    color: "#FFFFFF",
+    fontFamily: activeTheme.fonts.display,
+    fontSize: 24,
+    fontWeight: "800",
+    lineHeight: 28,
+  },
+  drawerToneDot: {
+    borderRadius: 7,
+    height: 14,
+    width: 14,
+  },
+  filterRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  handle: {
+    alignSelf: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.36)",
+    borderRadius: 999,
+    height: 5,
+    width: 56,
+  },
+  map: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  mapPlaceholder: {
+    backgroundColor: "#0c4152",
+  },
+  mapWrap: {
+    backgroundColor: "#021019",
+    flex: 1,
+  },
+  markerCore: {
+    alignItems: "center",
+    borderColor: "rgba(255,255,255,0.86)",
+    borderRadius: 18,
+    borderWidth: 2,
+    height: 36,
+    justifyContent: "center",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    width: 36,
+  },
+  markerCoreActive: {
+    borderColor: "#FFFFFF",
+    height: 42,
+    width: 42,
+  },
+  markerShell: {
+    alignItems: "center",
+  },
+  markerTip: {
+    borderLeftColor: "transparent",
+    borderLeftWidth: 6,
+    borderRightColor: "transparent",
+    borderRightWidth: 6,
+    borderTopWidth: 10,
+    marginTop: -2,
+  },
+  markerTipActive: {
+    borderLeftWidth: 7,
+    borderRightWidth: 7,
+    borderTopWidth: 12,
+  },
+  pillRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  screen: {
+    backgroundColor: activeTheme.colors.background,
+    flex: 1,
+  },
+  topOverlay: {
+    left: 20,
+    position: "absolute",
+    right: 20,
+    top: 12,
+    zIndex: 2,
+  },
+  venueWrap: {
+    borderRadius: activeTheme.radii.lg,
+  },
+  venueWrapActive: {
+    backgroundColor: isDark ? activeTheme.colors.surface : "#FFFFFF",
+    shadowColor: isDark ? activeTheme.colors.shadow : "#F6B734",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+  },
+    });
+  });
+
+  const drawerTone = {
+    gold: theme.colors.gold,
+    mint: theme.colors.mint,
+    coral: theme.colors.coral,
+    slate: theme.colors.slate,
+  } as const;
+
   const { height } = useWindowDimensions();
   const isFocused = useIsFocused();
   const mapRef = useRef<MapView | null>(null);
@@ -324,7 +499,7 @@ export default function FindScreen() {
                         isSelected && styles.markerCoreActive,
                       ]}
                     >
-                      <Ionicons color={premiumTheme.colors.ink} name="radio" size={15} />
+                      <Ionicons color={theme.colors.ink} name="radio" size={15} />
                     </View>
                     <View
                       style={[
@@ -348,7 +523,7 @@ export default function FindScreen() {
             trailingAction={
               <Pressable onPress={handleLocatePress} style={styles.circleButton}>
                 <Ionicons
-                  color={premiumTheme.colors.ink}
+                  color={theme.colors.ink}
                   name={isLocating ? "sync-outline" : "locate-outline"}
                   size={20}
                 />
@@ -382,7 +557,7 @@ export default function FindScreen() {
                 <View style={[styles.drawerToneDot, { backgroundColor: drawerTone[selectedVenue.tone] }]} />
                 <View style={styles.drawerAction}>
                   <Ionicons
-                    color={premiumTheme.colors.ink}
+                    color="#FFFFFF"
                     name={isExpanded ? "chevron-down" : "chevron-up"}
                     size={20}
                   />
@@ -424,172 +599,3 @@ export default function FindScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  circleButton: {
-    alignItems: "center",
-    backgroundColor: "#F7F5F2",
-    borderColor: premiumTheme.colors.border,
-    borderRadius: 24,
-    borderWidth: 1,
-    height: 48,
-    justifyContent: "center",
-    shadowColor: "#5B6474",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    width: 48,
-  },
-  drawer: {
-    backgroundColor: "#EFECE9",
-    borderColor: premiumTheme.colors.border,
-    borderTopLeftRadius: 34,
-    borderTopRightRadius: 34,
-    borderWidth: 1,
-    bottom: -32,
-    overflow: "hidden",
-    position: "absolute",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: -10 },
-    shadowOpacity: 0.28,
-    shadowRadius: 24,
-  },
-  drawerAction: {
-    alignItems: "center",
-    backgroundColor: "rgba(224, 90, 71, 0.12)",
-    borderRadius: 18,
-    height: 36,
-    justifyContent: "center",
-    width: 36,
-  },
-  drawerContent: {
-    gap: 18,
-    paddingHorizontal: 20,
-    paddingTop: 8,
-  },
-  drawerEyebrow: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1.1,
-    textTransform: "uppercase",
-  },
-  drawerHandleArea: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-  },
-  drawerPreview: {
-    gap: 16,
-    paddingBottom: 8,
-  },
-  drawerPreviewCopy: {
-    flex: 1,
-    gap: 6,
-  },
-  drawerPreviewRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-  },
-  drawerSubtitle: {
-    color: premiumTheme.colors.inkMuted,
-    fontFamily: premiumTheme.fonts.body,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  drawerTitle: {
-    color: premiumTheme.colors.ink,
-    fontFamily: premiumTheme.fonts.display,
-    fontSize: 24,
-    fontWeight: "800",
-    lineHeight: 28,
-  },
-  drawerToneDot: {
-    borderRadius: 7,
-    height: 14,
-    width: 14,
-  },
-  filterRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  handle: {
-    alignSelf: "center",
-    backgroundColor: "rgba(30,23,23,0.34)",
-    borderRadius: 999,
-    height: 5,
-    width: 56,
-  },
-  map: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  mapPlaceholder: {
-    backgroundColor: "#0c4152",
-  },
-  mapWrap: {
-    backgroundColor: "#021019",
-    flex: 1,
-  },
-  markerCore: {
-    alignItems: "center",
-    borderColor: "rgba(255,255,255,0.86)",
-    borderRadius: 18,
-    borderWidth: 2,
-    height: 36,
-    justifyContent: "center",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.28,
-    shadowRadius: 12,
-    width: 36,
-  },
-  markerCoreActive: {
-    borderColor: "#FFFFFF",
-    height: 42,
-    width: 42,
-  },
-  markerShell: {
-    alignItems: "center",
-  },
-  markerTip: {
-    borderLeftColor: "transparent",
-    borderLeftWidth: 6,
-    borderRightColor: "transparent",
-    borderRightWidth: 6,
-    borderTopWidth: 10,
-    marginTop: -2,
-  },
-  markerTipActive: {
-    borderLeftWidth: 7,
-    borderRightWidth: 7,
-    borderTopWidth: 12,
-  },
-  pillRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  screen: {
-    backgroundColor: premiumTheme.colors.background,
-    flex: 1,
-  },
-  topOverlay: {
-    left: 20,
-    position: "absolute",
-    right: 20,
-    top: 12,
-    zIndex: 2,
-  },
-  venueWrap: {
-    borderRadius: premiumTheme.radii.lg,
-  },
-  venueWrapActive: {
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#F6B734",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
-  },
-});

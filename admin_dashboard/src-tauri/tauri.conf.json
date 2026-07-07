@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "RQST Admin",
+  "version": "0.1.0",
+  "identifier": "com.rqst.admin",
+  "build": {
+    "beforeDevCommand": "bun run dev",
+    "devUrl": "http://127.0.0.1:3002",
+    "frontendDist": "../.output/public"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "RQST Admin",
+        "width": 1480,
+        "height": 980,
+        "backgroundColor": "#f4f5f2"
+      }
+    ]
+  }
+}

@@ -13,6 +13,7 @@ export const apiRoutes = {
   venuePlacesSearch: "/api/v1/venues/places/search",
   sessionsNearby: "/api/v1/sessions/nearby",
   currentDjSession: "/api/v1/dj/sessions/current",
+  resetCurrentDjQueue: "/api/v1/dj/sessions/current/queue/reset",
   songsSearch: "/api/v1/songs/search",
 } as const;
 
@@ -22,10 +23,15 @@ export const apiRouteBuilders = {
   request: (requestId: number | string) => `/api/v1/requests/${requestId}`,
   contributeToRequest: (requestId: number | string) => `/api/v1/requests/${requestId}/contribute`,
   undoRequest: (requestId: number | string) => `/api/v1/requests/${requestId}/undo`,
-  confirmRequest: (requestId: number | string) => `/api/v1/dj/requests/${requestId}/confirm`,
+    confirmRequest: (requestId: number | string) => `/api/v1/dj/requests/${requestId}/confirm`,
   markRequestPlayed: (requestId: number | string) => `/api/v1/dj/requests/${requestId}/played`,
   currentDjRequests: "/api/v1/dj/requests/current",
+  djEarnings: "/api/v1/dj/earnings",
+  djPayments: "/api/v1/dj/payments",
+  djWithdraw: "/api/v1/dj/payouts/withdraw",
   djEvent: (eventId: number | string) => `/api/v1/djs/events/${eventId}`,
+  djEventExtend: (eventId: number | string) => `/api/v1/djs/events/${eventId}/extend`,
+  djEventEnd: (eventId: number | string) => `/api/v1/djs/events/${eventId}/end`,
   djEventFlyer: (eventId: number | string) => `/api/v1/djs/events/${eventId}/flyer`,
   djEventsBySlug: (slug: string) => `/api/v1/djs/${slug}/events`,
 } as const;

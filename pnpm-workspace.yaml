@@ -1,6 +1,7 @@
 packages:
   - mobile
   - desktop
+  - admin_dashboard
   - packages/*
 peerDependencyRules:
   allowedVersions:

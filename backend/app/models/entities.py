@@ -90,7 +90,7 @@ class Event(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True)
     dj_profile_id: Mapped[int] = mapped_column(ForeignKey("dj_profiles.id"), index=True)
     venue_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), index=True)
-    name: Mapped[str] = mapped_column(String(255))
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -145,6 +145,7 @@ class SongRequest(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     session_id: Mapped[int] = mapped_column(ForeignKey("dj_sessions.id"), index=True)
+    event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id"), nullable=True, index=True)
     song_id: Mapped[int] = mapped_column(ForeignKey("songs.id"), index=True)
     requested_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     status: Mapped[RequestStatus] = mapped_column(String(32), default=RequestStatus.PENDING_PAYMENT)

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -22,6 +22,8 @@ INACTIVE_QUEUE_STATUSES = {
     RequestStatus.REFUNDED,
     RequestStatus.EXPIRED,
 }
+
+QUEUE_INACTIVE_STATUSES = INACTIVE_QUEUE_STATUSES | {RequestStatus.PLAYED}
 
 UNDO_WINDOW_SECONDS = 30
 
@@ -116,4 +118,80 @@ def delete_song_request(db: Session, song_request: SongRequest) -> None:
     db.execute(delete(Contribution).where(Contribution.song_request_id == request_id))
     db.execute(delete(Payment).where(Payment.song_request_id == request_id))
     db.delete(song_request)
+
+
+PURGEABLE_QUEUE_STATUSES = {
+    RequestStatus.PENDING_PAYMENT,
+    RequestStatus.CANCELLED,
+    RequestStatus.REJECTED,
+    RequestStatus.REFUNDED,
+    RequestStatus.EXPIRED,
+}
+
+
+def purge_inactive_requests_for_session(
+    db: Session,
+    session_id: int,
+    *,
+    event_id: int | None = None,
+) -> None:
+    stmt = select(SongRequest).where(
+        SongRequest.session_id == session_id,
+        SongRequest.status.in_(PURGEABLE_QUEUE_STATUSES),
+    )
+    if event_id is not None:
+        stmt = stmt.where(SongRequest.event_id == event_id)
+
+    for request in list(db.scalars(stmt)):
+        delete_song_request(db, request)
+
+
+def cancel_open_requests_for_session(
+    db: Session,
+    session_id: int,
+    *,
+    event_id: int | None = None,
+    now: datetime | None = None,
+) -> None:
+    current = now or datetime.now(UTC)
+    stmt = select(SongRequest).where(
+        SongRequest.session_id == session_id,
+        SongRequest.status.in_(
+            {
+                RequestStatus.PENDING_PAYMENT,
+                RequestStatus.OPEN,
+                RequestStatus.LOCKED,
+                RequestStatus.CONFIRMED_BY_DJ,
+            }
+        ),
+    )
+    if event_id is not None:
+        stmt = stmt.where(SongRequest.event_id == event_id)
+
+    for request in db.scalars(stmt):
+        request.status = RequestStatus.CANCELLED
+        request.cancelled_at = current
+
+
+def cancel_mismatched_open_requests(db: Session, session: DJSession, *, now: datetime | None = None) -> None:
+    if session.event_id is None:
+        return
+
+    current = now or datetime.now(UTC)
+    stmt = select(SongRequest).where(
+        SongRequest.session_id == session.id,
+        SongRequest.status.in_(
+            {
+                RequestStatus.PENDING_PAYMENT,
+                RequestStatus.OPEN,
+                RequestStatus.LOCKED,
+                RequestStatus.CONFIRMED_BY_DJ,
+            }
+        ),
+        or_(SongRequest.event_id.is_(None), SongRequest.event_id != session.event_id),
+    )
+
+    for request in db.scalars(stmt):
+        request.status = RequestStatus.CANCELLED
+        request.cancelled_at = current
 

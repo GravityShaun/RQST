@@ -9,6 +9,7 @@ export type SessionRequest = {
   original_amount_cents: number;
   total_amount_cents: number;
   created_at: string;
+  played_at?: string | null;
   song_title?: string | null;
   song_artist?: string | null;
   contributor_count?: number | null;
@@ -26,6 +27,15 @@ type DjSession = {
   status: string;
   accepting_requests: boolean;
 };
+
+const INACTIVE_QUEUE_STATUSES = new Set(["cancelled", "rejected", "refunded", "expired"]);
+
+function isActiveQueueStatus(rawStatus: string) {
+  const normalizedStatus = rawStatus.toLowerCase();
+  return normalizedStatus !== "played" && !INACTIVE_QUEUE_STATUSES.has(normalizedStatus);
+}
+
+export { isActiveQueueStatus };
 
 const POLL_INTERVAL_MS = 30_000;
 const RECONNECT_DELAY_MS = 3_000;
@@ -67,6 +77,7 @@ export function useSessionQueue() {
   const { ensureAuth, clearAuth } = useDjAuth();
 
   const requests = ref<SessionRequest[]>([]);
+  const playedRequests = ref<SessionRequest[]>([]);
   const pending = ref(true);
   const error = ref(false);
   const sessionId = ref<number | null>(null);
@@ -98,7 +109,7 @@ export function useSessionQueue() {
     const data = await fetchJson<SessionRequest[]>(
       `${config.public.apiBaseUrl}/sessions/${activeSessionId}/requests`,
     );
-    requests.value = data;
+    requests.value = data.filter((request) => isActiveQueueStatus(request.status));
     error.value = false;
   }
 
@@ -106,7 +117,7 @@ export function useSessionQueue() {
     if (payload.session_id !== sessionId.value) {
       return;
     }
-    requests.value = payload.requests;
+    requests.value = payload.requests.filter((request) => isActiveQueueStatus(request.status));
     error.value = false;
   }
 
@@ -140,6 +151,10 @@ export function useSessionQueue() {
     try {
       const activeSessionId = await resolveSessionId();
       const previousSessionId = sessionId.value;
+      if (previousSessionId !== activeSessionId) {
+        requests.value = [];
+        playedRequests.value = [];
+      }
       sessionId.value = activeSessionId;
       await fetchRequests(activeSessionId);
       if (previousSessionId !== activeSessionId || !socket || socket.readyState === WebSocket.CLOSED) {
@@ -151,6 +166,8 @@ export function useSessionQueue() {
   }
 
   async function markRequestPlayed(requestId: number, status: string) {
+    const playedRequest = requests.value.find((request) => request.id === requestId);
+
     async function performMark(accessToken: string) {
       const normalizedStatus = status.toLowerCase();
 
@@ -178,6 +195,27 @@ export function useSessionQueue() {
       await performMark(await ensureAuth());
     }
 
+    if (playedRequest) {
+      playedRequests.value = [
+        {
+          ...playedRequest,
+          status: "played",
+          played_at: new Date().toISOString(),
+        },
+        ...playedRequests.value.filter((request) => request.id !== requestId),
+      ];
+    }
+
+    await refreshQueue();
+  }
+
+  async function resetQueue() {
+    const accessToken = await ensureAuth();
+    await postJson(
+      `${config.public.apiBaseUrl}${apiRoutes.resetCurrentDjQueue.replace("/api/v1", "")}`,
+      accessToken,
+    );
+    playedRequests.value = [];
     await refreshQueue();
   }
 
@@ -203,10 +241,12 @@ export function useSessionQueue() {
 
   return {
     requests,
+    playedRequests,
     pending,
     error,
     sessionId,
     refreshQueue,
     markRequestPlayed,
+    resetQueue,
   };
 }

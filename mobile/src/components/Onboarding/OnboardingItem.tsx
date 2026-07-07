@@ -61,7 +61,7 @@ export default function OnboardingItem({
     const scale = interpolate(
       x.value,
       [(index - 1) * screenWidth, index * screenWidth, (index + 1) * screenWidth],
-      [1, 2, 2],
+      [1, 4, 4],
       Extrapolation.CLAMP,
     );
 

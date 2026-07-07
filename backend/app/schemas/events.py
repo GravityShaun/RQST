@@ -7,7 +7,7 @@ from app.schemas.venues import VenueCreate, VenueRead
 
 
 class EventCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=255)
+    name: str | None = Field(default=None, max_length=255)
     description: str | None = None
     starts_at: datetime
     ends_at: datetime | None = None
@@ -25,7 +25,7 @@ class EventCreate(BaseModel):
 
 
 class EventUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=255)
+    name: str | None = Field(default=None, max_length=255)
     description: str | None = None
     starts_at: datetime | None = None
     ends_at: datetime | None = None
@@ -34,10 +34,14 @@ class EventUpdate(BaseModel):
     venue: VenueCreate | None = None
 
 
+class EventExtend(BaseModel):
+    minutes: int = Field(ge=1, le=480)
+
+
 class EventRead(APIModel):
     id: int
     dj_profile_id: int
-    name: str
+    name: str | None = None
     description: str | None = None
     starts_at: datetime
     ends_at: datetime | None = None
