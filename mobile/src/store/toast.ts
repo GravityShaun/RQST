@@ -8,6 +8,7 @@ type ToastMessage = {
   onAction?: () => void | Promise<void>;
   durationMs?: number;
   showConfetti?: boolean;
+  confettiEmoji?: string;
 };
 
 type ToastState = {
@@ -20,8 +21,19 @@ let nextToastId = 1;
 
 export const useToastStore = create<ToastState>((set) => ({
   toast: null,
-  showToast: ({ title, message, actionLabel, onAction, durationMs, showConfetti }) => {
-    set({ toast: { id: nextToastId++, title, message, actionLabel, onAction, durationMs, showConfetti } });
+  showToast: ({ title, message, actionLabel, onAction, durationMs, showConfetti, confettiEmoji }) => {
+    set({
+      toast: {
+        id: nextToastId++,
+        title,
+        message,
+        actionLabel,
+        onAction,
+        durationMs,
+        showConfetti,
+        confettiEmoji,
+      },
+    });
   },
   dismissToast: () => {
     set({ toast: null });

@@ -1,9 +1,9 @@
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Animated, Easing, Image, Modal, PanResponder, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Animated, Easing, Image, Keyboard, Modal, PanResponder, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { formatUsd } from "@rqst/shared-config";
-import { apiRouteBuilders, apiRoutes, type SongRequestSummary } from "@rqst/contracts";
+import { apiRouteBuilders, apiRoutes, type ComplimentaryCredit, type SongRequestSummary, type TipSummary } from "@rqst/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsFocused, useNavigation } from "@react-navigation/native";
 import { router } from "expo-router";
@@ -12,8 +12,24 @@ import { usePremiumTheme, useResolvedColorScheme, useThemedStyles } from "../../
 import { DarkGrainyGradientBackground } from "../../src/components/grainy-gradient/DarkGrainyGradient";
 import { GrainyGradientBackground } from "../../src/components/grainy-gradient/GrainyGradient";
 import { RequestCancelAction } from "../../src/components/RequestCancelAction";
+import { DeadlineCountdown, formatPlayDeadlineLabel, getPlayDeadlineAmountCents } from "../../src/components/PlayDeadline";
+
+function formatDeadlineSeconds(totalSeconds: number | null | undefined) {
+  if (totalSeconds == null || totalSeconds < 0) {
+    return null;
+  }
+
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
 import { ScreenShell, SectionTitle, SurfaceCard, Tag } from "../../src/components/premium-ui";
-import { DirectorySearch } from "../../src/features/discover/DirectorySearch";
 import { activeSession as mockActiveSession, initialUserRequests, songLibrary, type UserAddedContribution, type UserRequest } from "../../src/features/rqst/mock-data";
 import {
   apiBaseUrl,
@@ -35,6 +51,16 @@ const siteGradientColors = ["#FFD2C8", "#F4B8CF", "#E8D9FF"] as const;
 const siteThemeBlue = "#2F5FBE";
 const shoutoutQuickAmounts = ["3", "5", "10"] as const;
 const shoutoutCustomAmountValue = "custom";
+const complimentaryMaxSongCents = 5000;
+const complimentaryMaxShoutoutCents = 2000;
+const complimentaryLimitsAlert =
+  "Complimentary song limits: song up to $50, shoutout up to $20, and no deadline timer.";
+const playDeadlineOptions = [
+  { minutes: 60, amountCents: 500, label: "1 hour" },
+  { minutes: 30, amountCents: 1000, label: "30 min" },
+  { minutes: 15, amountCents: 2000, label: "15 min" },
+  { minutes: 5, amountCents: 5000, label: "5 min" },
+] as const;
 const rqstModeTabs = ["search", "requested"] as const;
 const requestTabs = ["queued", "played"] as const;
 const drawerClosedOffset = 760;
@@ -195,6 +221,14 @@ function getSongResultKey(song: SearchSong) {
   return `${song.id}-${song.title}-${song.artist}`;
 }
 
+function songIdsMatch(left: number | string | null | undefined, right: number | string | null | undefined) {
+  if (left == null || right == null) {
+    return false;
+  }
+
+  return String(left) === String(right);
+}
+
 function formatRequestDateTime(value: string) {
   return new Date(value).toLocaleString("en-US", {
     month: "short",
@@ -259,16 +293,43 @@ function formatAddStatus(status: UserAddedContribution["status"]) {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
+function requestHasShoutout(request: Pick<UserRequest, "shoutoutAmountCents" | "shoutoutMessage">) {
+  return (request.shoutoutAmountCents ?? 0) > 0 && Boolean(request.shoutoutMessage);
+}
+
+function shoutoutCountsTowardTotal(isPlayed: boolean, shoutoutFulfilled?: boolean | null) {
+  return !isPlayed || shoutoutFulfilled === true;
+}
+
+function effectivePoolTotalCents(
+  request: Pick<UserRequest, "totalCents" | "shoutoutAmountCents" | "shoutoutFulfilled" | "playDeadlineAmountCents" | "status">,
+  hasShoutout: boolean,
+  isPlayed: boolean,
+) {
+  let total = request.totalCents;
+  if (request.status === "TimedOut") {
+    return request.playDeadlineAmountCents ?? 0;
+  }
+  if (hasShoutout && isPlayed && !shoutoutCountsTowardTotal(isPlayed, request.shoutoutFulfilled)) {
+    total = Math.max(total - (request.shoutoutAmountCents ?? 0), 0);
+  }
+  return total;
+}
+
 function mapRequestStatus(status: SongRequestSummary["status"]): UserRequest["status"] {
   if (status === "played") {
     return "Played";
+  }
+
+  if (status === "expired") {
+    return "TimedOut";
   }
 
   if (status === "locked" || status === "confirmed_by_dj") {
     return "Pending";
   }
 
-  if (status === "cancelled" || status === "refunded" || status === "rejected" || status === "expired") {
+  if (status === "cancelled" || status === "refunded" || status === "rejected") {
     return "Canceled";
   }
 
@@ -292,6 +353,11 @@ function mapBackendRequest(request: SongRequestSummary, currentUserId?: number |
   const myAddedContributions = mapUserAddedContributions(request, currentUserId);
   const isOriginalRequester =
     currentUserId != null && currentUserId === request.requestedByUserId;
+  const shoutoutAmountCents = request.shoutoutAmountCents ?? 0;
+  const shoutoutMessage = request.note?.trim() || null;
+  const hasShoutout = shoutoutAmountCents > 0 && Boolean(shoutoutMessage);
+  const playDeadlineAmountCents = request.playDeadlineAmountCents ?? 0;
+  const playDeadlineMinutes = request.playDeadlineMinutes ?? null;
 
   return {
     id: String(request.id),
@@ -302,6 +368,7 @@ function mapBackendRequest(request: SongRequestSummary, currentUserId?: number |
     djName: request.djArtistName ?? mockActiveSession.djName,
     venue: request.venueName ?? mockActiveSession.venue,
     requestedAmountCents: poolOriginalCents,
+    songRequestAmountCents: request.originalAmountCents,
     totalCents,
     myContributionCents,
     myOriginalContributionCents,
@@ -311,6 +378,51 @@ function mapBackendRequest(request: SongRequestSummary, currentUserId?: number |
     isOriginalRequester,
     status: mapRequestStatus(request.status),
     canCancel: request.status === "pending_payment" || request.status === "open",
+    shoutoutMessage: hasShoutout ? shoutoutMessage : null,
+    shoutoutAmountCents: hasShoutout ? shoutoutAmountCents : 0,
+    shoutoutFulfilled: hasShoutout ? (request.shoutoutFulfilled ?? null) : null,
+    playDeadlineMinutes,
+    playDeadlineAmountCents: playDeadlineAmountCents > 0 ? playDeadlineAmountCents : 0,
+    playDeadlineExpiresAt: request.playDeadlineExpiresAt ?? null,
+    playDeadlineRemainingSeconds: request.playDeadlineRemainingSeconds ?? null,
+    playDeadlineElapsedSeconds: request.playDeadlineElapsedSeconds ?? null,
+    expiredAt: request.expiredAt ?? null,
+    isComplimentary: Boolean(request.isComplimentary),
+    kind: "request",
+  };
+}
+
+function mapBackendTip(tip: TipSummary): UserRequest {
+  return {
+    id: `tip-${tip.id}`,
+    title: "Tip",
+    artist: "No song · direct tip to the DJ",
+    submittedAt: tip.createdAt,
+    djName: tip.djArtistName ?? mockActiveSession.djName,
+    venue: tip.venueName ?? mockActiveSession.venue,
+    requestedAmountCents: tip.amountCents,
+    songRequestAmountCents: tip.amountCents,
+    totalCents: tip.amountCents,
+    myContributionCents: tip.amountCents,
+    myOriginalContributionCents: tip.amountCents,
+    myAddedContributionCents: 0,
+    addedToSongCents: 0,
+    myAddedContributions: [],
+    isOriginalRequester: true,
+    status: "Played",
+    canCancel: false,
+    shoutoutMessage: null,
+    shoutoutAmountCents: 0,
+    shoutoutFulfilled: null,
+    playDeadlineMinutes: null,
+    playDeadlineAmountCents: 0,
+    playDeadlineExpiresAt: null,
+    playDeadlineRemainingSeconds: null,
+    playDeadlineElapsedSeconds: null,
+    expiredAt: null,
+    isComplimentary: false,
+    kind: "tip",
+    tipThanked: tip.status === "thanked",
   };
 }
 
@@ -478,9 +590,8 @@ amountChip: {
   },
   content: {
     gap: 16,
-    minHeight: "100%",
+    flexGrow: 1,
     paddingBottom: 112,
-    position: "relative",
   },
   cta: {
     alignItems: "center",
@@ -735,6 +846,37 @@ amountChip: {
     justifyContent: "center",
     paddingVertical: 12,
   },
+  complimentaryAddButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "#7c3aed",
+    borderColor: "rgba(255, 255, 255, 0.4)",
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 5,
+    justifyContent: "center",
+    minHeight: 32,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  complimentaryAddButtonActive: {
+    backgroundColor: "#6d28d9",
+  },
+  complimentaryAddButtonText: {
+    color: "#FFFFFF",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  modalComplimentaryButton: {
+    alignItems: "center",
+    backgroundColor: "#7c3aed",
+    borderRadius: 999,
+    flex: 1,
+    justifyContent: "center",
+    paddingVertical: 12,
+  },
   modalPrimaryText: {
     color: activeTheme.colors.text,
     fontFamily: activeTheme.fonts.body,
@@ -852,12 +994,12 @@ amountChip: {
     borderTopWidth: 1,
     elevation: 18,
     flexGrow: 1,
-    gap: 14,
-    maxHeight: "90%",
+    maxHeight: "92%",
     minHeight: "58%",
-    paddingHorizontal: 18,
+    overflow: "hidden",
+    paddingBottom: 10,
+    paddingHorizontal: 0,
     paddingTop: 10,
-    paddingBottom: 34,
     shadowColor: isDark ? "#000000" : "#1E1717",
     shadowOffset: { width: 0, height: -12 },
     shadowOpacity: 0.18,
@@ -978,7 +1120,6 @@ amountChip: {
   },
   requestModalFooter: {
     gap: 10,
-    marginTop: "auto",
   },
   requestDetailGrid: {
     columnGap: 8,
@@ -1002,8 +1143,8 @@ amountChip: {
   },
   requestDragArea: {
     alignItems: "center",
-    marginHorizontal: -18,
     paddingBottom: 6,
+    paddingHorizontal: 18,
     paddingTop: 2,
   },
   requestDetailLabel: {
@@ -1061,6 +1202,12 @@ amountChip: {
     fontSize: 12,
     fontWeight: "800",
   },
+  requestYouPartDeadline: {
+    color: "#E05A47",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "800",
+  },
   requestYouTotal: {
     color: activeTheme.colors.ink,
     fontFamily: activeTheme.fonts.display,
@@ -1072,6 +1219,70 @@ amountChip: {
     fontFamily: activeTheme.fonts.body,
     fontSize: 12,
     fontWeight: "600",
+  },
+  playedShoutoutCard: {
+    backgroundColor: isDark ? "rgba(94, 120, 184, 0.16)" : "rgba(47, 95, 190, 0.08)",
+    borderColor: isDark ? "rgba(94, 120, 184, 0.34)" : "rgba(47, 95, 190, 0.18)",
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  playedShoutoutCardIncluded: {
+    backgroundColor: isDark ? "rgba(94, 120, 184, 0.22)" : "rgba(47, 95, 190, 0.12)",
+    borderColor: isDark ? "rgba(94, 120, 184, 0.42)" : "rgba(47, 95, 190, 0.24)",
+  },
+  playedShoutoutLabel: {
+    color: isDark ? "#A8C4FF" : "#2F5FBE",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  playedShoutoutLabelIncluded: {
+    color: isDark ? "#A8C4FF" : "#2F5FBE",
+  },
+  playedShoutoutMessage: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  playedShoutoutPrice: {
+    color: isDark ? "#A8C4FF" : "#2F5FBE",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 2,
+  },
+  playedShoutoutPriceIncluded: {
+    color: isDark ? "#A8C4FF" : "#2F5FBE",
+  },
+  playedShoutoutStatus: {
+    color: activeTheme.colors.inkMuted,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 4,
+  },
+  playedShoutoutStatusIncluded: {
+    color: isDark ? "#A8C4FF" : "#2F5FBE",
+  },
+  requestDetailValueShoutout: {
+    color: isDark ? "#A8C4FF" : "#2F5FBE",
+  },
+  requestDetailValueShoutoutExcluded: {
+    color: activeTheme.colors.inkMuted,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  requestYouPartShoutout: {
+    color: isDark ? "#A8C4FF" : "#2F5FBE",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "800",
   },
   addHistoryBackdrop: {
     backgroundColor: isDark ? "rgba(3, 8, 20, 0.72)" : "rgba(30,23,23,0.4)",
@@ -1407,6 +1618,11 @@ amountChip: {
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
+  addonButtonRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
   shoutoutAddButtonText: {
     color: "#FFFFFF",
     fontFamily: activeTheme.fonts.body,
@@ -1417,8 +1633,70 @@ amountChip: {
     color: "#2F5FBE",
     fontFamily: activeTheme.fonts.body,
     fontSize: 12,
-    fontWeight: "800",
     lineHeight: 17,
+  },
+  complimentaryAlertText: {
+    color: "#6d28d9",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17,
+  },
+  complimentaryAlertCard: {
+    backgroundColor: "rgba(124, 58, 237, 0.1)",
+    borderColor: "rgba(124, 58, 237, 0.28)",
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  complimentaryRequestBanner: {
+    alignItems: "center",
+    backgroundColor: "rgba(124, 58, 237, 0.1)",
+    borderColor: "rgba(124, 58, 237, 0.28)",
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  complimentaryRequestBannerText: {
+    color: "#6d28d9",
+    flex: 1,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
+  },
+  tipIconWrap: {
+    alignItems: "center",
+    backgroundColor: "rgba(224, 90, 71, 0.14)",
+    borderRadius: 12,
+    height: 48,
+    justifyContent: "center",
+    width: 48,
+  },
+  complimentaryTotalRow: {
+    alignItems: "baseline",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  complimentaryTotalStruck: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "800",
+    textDecorationLine: "line-through",
+    textDecorationColor: "#7c3aed",
+  },
+  complimentaryTotalZero: {
+    color: "#6d28d9",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "800",
   },
   shoutoutAmountChip: {
     alignItems: "center",
@@ -1494,6 +1772,114 @@ amountChip: {
     borderWidth: 1,
     gap: 10,
     padding: 10,
+  },
+  deadlinePanel: {
+    backgroundColor: "#2F5FBE",
+    borderColor: "#2F5FBE",
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 10,
+    padding: 10,
+  },
+  deadlineSupportingText: {
+    color: "#FFFFFF",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17,
+  },
+  deadlineAmountChip: {
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.16)",
+    borderColor: "rgba(255, 255, 255, 0.34)",
+    borderRadius: 999,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 34,
+    minWidth: 58,
+    paddingHorizontal: 12,
+  },
+  deadlineAmountChipSelected: {
+    backgroundColor: "#FFFFFF",
+    borderColor: "#FFFFFF",
+  },
+  deadlineAmountChipText: {
+    color: "#FFFFFF",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  deadlineAmountChipTextSelected: {
+    color: "#2F5FBE",
+  },
+  requestDrawerScroll: {
+    flex: 1,
+  },
+  requestDrawerScrollContent: {
+    gap: 14,
+    paddingBottom: 34,
+    paddingHorizontal: 18,
+  },
+  timedOutCard: {
+    backgroundColor: "rgba(47, 95, 190, 0.08)",
+    borderColor: "rgba(47, 95, 190, 0.16)",
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+    padding: 12,
+  },
+  timedOutLabel: {
+    color: "#2F5FBE",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  timedOutMessage: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
+  },
+  timedOutPrice: {
+    color: "#2F5FBE",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  deadlineQueuedRow: {
+    marginTop: 2,
+  },
+  deadlinePlayedCard: {
+    backgroundColor: "rgba(47, 95, 190, 0.08)",
+    borderColor: "rgba(47, 95, 190, 0.16)",
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+    padding: 12,
+  },
+  deadlinePlayedLabel: {
+    color: "#2F5FBE",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  deadlinePlayedMessage: {
+    color: activeTheme.colors.ink,
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
+  },
+  deadlinePlayedPrice: {
+    color: "#2F5FBE",
+    fontFamily: activeTheme.fonts.body,
+    fontSize: 14,
+    fontWeight: "800",
   },
   smallButton: {
     alignItems: "center",
@@ -1615,6 +2001,7 @@ amountChip: {
   const [selectedArtistName, setSelectedArtistName] = useState("");
   const [selectedAlbumName, setSelectedAlbumName] = useState("");
   const [selectedSongId, setSelectedSongId] = useState<number | string>("");
+  const [selectedSongDraft, setSelectedSongDraft] = useState<SearchSong | null>(null);
   const [selectedAmount, setSelectedAmount] = useState<(typeof quickAmounts)[number] | typeof customAmountValue>("10");
   const [customAmount, setCustomAmount] = useState("");
   const [showShoutoutRequest, setShowShoutoutRequest] = useState(false);
@@ -1623,6 +2010,11 @@ amountChip: {
     (typeof shoutoutQuickAmounts)[number] | typeof shoutoutCustomAmountValue
   >("5");
   const [customShoutoutAmount, setCustomShoutoutAmount] = useState("");
+  const [showPlayDeadline, setShowPlayDeadline] = useState(false);
+  const [selectedPlayDeadlineMinutes, setSelectedPlayDeadlineMinutes] = useState<
+    (typeof playDeadlineOptions)[number]["minutes"] | null
+  >(null);
+  const [useComplimentary, setUseComplimentary] = useState(false);
   const [localRequests, setLocalRequests] = useState(initialUserRequests);
   const [rqstModeTab, setRqstModeTab] = useState<RqstModeTab>("search");
   const [requestTab, setRequestTab] = useState<RequestTab>("queued");
@@ -1635,12 +2027,38 @@ amountChip: {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [songSearchError, setSongSearchError] = useState("");
   const [requestSubmitError, setRequestSubmitError] = useState("");
-  const { sessionId, requestFloorCents, djName, venueName, hasSession, isSessionLive } = useActiveSession({
+  const { sessionId, requestFloorCents, djName, venueName, hasSession, isSessionLive, activeEventId } = useActiveSession({
     requireSelection: true,
   });
+  const complimentaryCreditsQuery = useQuery({
+    queryKey: ["meComplimentaryCredits"],
+    queryFn: () =>
+      rqstApi<ComplimentaryCredit[]>(apiRoutes.meComplimentaryCredits.replace("/api/v1", "")),
+    enabled: isSignedIn,
+    retry: false,
+  });
+  const availableComplimentaryCredit = useMemo(
+    () =>
+      (complimentaryCreditsQuery.data ?? []).find((credit) => {
+        if (credit.usedAt) {
+          return false;
+        }
+        if (activeEventId != null && credit.eventId === activeEventId) {
+          return true;
+        }
+        return sessionId != null && credit.liveSessionId === sessionId;
+      }) ?? null,
+    [activeEventId, complimentaryCreditsQuery.data, sessionId],
+  );
   const myRequestsQuery = useQuery({
     queryKey: ["meRequests"],
     queryFn: () => rqstApi<SongRequestSummary[]>(apiRoutes.meRequests.replace("/api/v1", "")),
+    enabled: isSignedIn,
+    retry: false,
+  });
+  const myTipsQuery = useQuery({
+    queryKey: ["meTips"],
+    queryFn: () => rqstApi<TipSummary[]>(apiRoutes.meTips.replace("/api/v1", "")),
     enabled: isSignedIn,
     retry: false,
   });
@@ -1670,6 +2088,7 @@ amountChip: {
       ]);
       queryClient.invalidateQueries({ queryKey: ["meRequests"] });
       queryClient.invalidateQueries({ queryKey: ["sessionRequests", sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["meComplimentaryCredits"] });
     },
     retry: false,
   });
@@ -1746,7 +2165,10 @@ amountChip: {
   const selectedAlbum = selectedAlbumName
     ? artistAlbumSections.find((section) => section.album === selectedAlbumName)
     : undefined;
-  const selectedSong = filteredSongs.find((song) => song.id === selectedSongId);
+  const selectedSong =
+    selectedSongDraft ??
+    filteredSongs.find((song) => songIdsMatch(song.id, selectedSongId)) ??
+    artistFilteredSongs.find((song) => songIdsMatch(song.id, selectedSongId));
   const existingQueueRequest = useMemo(
     () => findExistingQueueRequest(selectedSong, sessionRequestsQuery.data),
     [selectedSong, sessionRequestsQuery.data],
@@ -1772,26 +2194,39 @@ amountChip: {
         );
   const hasVisibleResults = selectedArtistQuery ? artistFilteredSongs.length > 0 : filteredResults.length > 0;
   const canShowEmptyState = normalizedInputQuery.length >= 2 && hasFetchedAppleMusic && !isSearchingSongs && !hasVisibleResults;
-  const shouldDockSearch = normalizedInputQuery.length > 0 || Boolean(selectedSong);
-  const searchTopSpacerHeight = searchDockProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [188, 0],
-  });
+  const shouldDockSearch = normalizedInputQuery.length > 0 || selectedSongDraft != null;
+  const searchDockSpacerHeight = shouldDockSearch ? 0 : 188;
+  const isSongSearchOpen =
+    rqstModeTab === "search" &&
+    (normalizedInputQuery.length >= 2 || Boolean(selectedArtistName) || selectedSongDraft != null);
   const bidAmount = selectedAmount === customAmountValue ? customAmount : selectedAmount;
   const bidCents = Math.max(Number(bidAmount || 0), 0) * 100;
   const shoutoutAmount =
     selectedShoutoutAmount === shoutoutCustomAmountValue ? customShoutoutAmount : selectedShoutoutAmount;
   const shoutoutAmountCents = showShoutoutRequest ? Math.max(Number(shoutoutAmount || 0), 0) * 100 : 0;
-  const requestTotalCents = bidCents + shoutoutAmountCents;
+  const playDeadlineAmountCents =
+    showPlayDeadline && !useComplimentary && selectedPlayDeadlineMinutes != null
+      ? getPlayDeadlineAmountCents(selectedPlayDeadlineMinutes)
+      : 0;
+  const requestTotalCents = bidCents + shoutoutAmountCents + playDeadlineAmountCents;
+  const complimentarySongOverLimit = useComplimentary && bidCents > complimentaryMaxSongCents;
+  const complimentaryShoutoutOverLimit =
+    useComplimentary && showShoutoutRequest && shoutoutAmountCents > complimentaryMaxShoutoutCents;
   const canSubmitNew =
     isSessionLive &&
     hasSession &&
     Boolean(selectedSong) &&
     !isExistingQueueSong &&
     requestFloorCents != null &&
-    Number.isFinite(requestTotalCents) &&
-    requestTotalCents >= requestFloorCents &&
-    (!showShoutoutRequest || (shoutoutMessage.trim().length > 0 && shoutoutAmountCents > 0));
+    Number.isFinite(bidCents) &&
+    bidCents >= requestFloorCents &&
+    (!useComplimentary || availableComplimentaryCredit != null) &&
+    !complimentarySongOverLimit &&
+    !complimentaryShoutoutOverLimit &&
+    (useComplimentary
+      ? !showShoutoutRequest || (shoutoutMessage.trim().length > 0 && shoutoutAmountCents > 0)
+      : (!showShoutoutRequest || (shoutoutMessage.trim().length > 0 && shoutoutAmountCents > 0)) &&
+        (!showPlayDeadline || selectedPlayDeadlineMinutes != null));
   const canSubmitContribution =
     isSessionLive &&
     hasSession &&
@@ -1807,6 +2242,13 @@ amountChip: {
         : (myRequestsQuery.data ?? []).filter((request) => request.sessionId === sessionId),
     [myRequestsQuery.data, sessionId],
   );
+  const mySessionTips = useMemo(
+    () =>
+      sessionId == null
+        ? []
+        : (myTipsQuery.data ?? []).filter((tip) => tip.sessionId === sessionId),
+    [myTipsQuery.data, sessionId],
+  );
   const canSubmit = isExistingQueueSong ? canSubmitContribution : canSubmitNew;
   const isSubmitPending = isExistingQueueSong ? contributeMutation.isPending : createRequestMutation.isPending;
   const requests = useMemo(() => {
@@ -1820,16 +2262,30 @@ amountChip: {
 
     return localRequests;
   }, [currentUserId, isSignedIn, localRequests, mySessionRequests, sessionId]);
+  const tipRequests = useMemo(
+    () => (isSignedIn ? mySessionTips.map((tip) => mapBackendTip(tip)) : []),
+    [isSignedIn, mySessionTips],
+  );
   const myRequestsById = useMemo(
     () => new Map(mySessionRequests.map((request) => [request.id, request])),
     [mySessionRequests],
   );
   const queuedRequests = requests.filter(
-    (request) => request.status !== "Played" && request.status !== "Canceled",
+    (request) =>
+      request.kind !== "tip" &&
+      request.status !== "Played" &&
+      request.status !== "Canceled" &&
+      request.status !== "TimedOut",
   );
-  const playedRequests = requests.filter((request) => request.status === "Played");
+  const playedSongRequests = requests.filter(
+    (request) => request.status === "Played" || request.status === "TimedOut",
+  );
+  const playedRequests = [...playedSongRequests, ...tipRequests];
   const visibleRequests = requestTab === "queued" ? queuedRequests : playedRequests;
-  const isRefreshingRequests = myRequestsQuery.isRefetching;
+  const requestListLength = visibleRequests.length;
+  // Pause grainy animation during song search or when the request list is long enough to scroll.
+  const shouldAnimateBackground = !isSongSearchOpen && requestListLength < 4;
+  const isRefreshingRequests = myRequestsQuery.isRefetching || myTipsQuery.isRefetching;
   const contributionRequest = contributionDraft
     ? requests.find((request) => request.id === contributionDraft.requestId)
     : undefined;
@@ -1857,17 +2313,9 @@ amountChip: {
   useEffect(() => {
     if (isSignedIn) {
       void myRequestsQuery.refetch();
+      void myTipsQuery.refetch();
     }
-  }, [isSignedIn, myRequestsQuery.refetch]);
-
-  useEffect(() => {
-    Animated.timing(searchDockProgress, {
-      duration: 340,
-      easing: Easing.out(Easing.cubic),
-      toValue: shouldDockSearch ? 1 : 0,
-      useNativeDriver: false,
-    }).start();
-  }, [searchDockProgress, shouldDockSearch]);
+  }, [isSignedIn, myRequestsQuery.refetch, myTipsQuery.refetch]);
 
   useEffect(() => {
     if (isScreenFocused) {
@@ -1878,6 +2326,7 @@ amountChip: {
     setSelectedArtistName("");
     setSelectedAlbumName("");
     setSelectedSongId("");
+    setSelectedSongDraft(null);
     setSelectedAmount("10");
     setCustomAmount("");
     setMusicSearchResults([]);
@@ -1927,20 +2376,19 @@ amountChip: {
 
     showSearchFirst(scrollRef, searchDockProgress, setRqstModeTab);
 
-    if (isSignedIn) {
-      void myRequestsQuery.refetch();
-    }
-
     const focusTimeout = setTimeout(() => {
       searchInputRef.current?.focus();
     }, 180);
 
     return () => clearTimeout(focusTimeout);
-  }, [isScreenFocused, isSignedIn, myRequestsQuery.refetch, searchDockProgress]);
+  }, [isScreenFocused, searchDockProgress]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("tabPress", () => {
       showSearchFirst(scrollRef, searchDockProgress, setRqstModeTab, true);
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 180);
     });
 
     return unsubscribe;
@@ -2008,30 +2456,34 @@ amountChip: {
     }, 180);
   }
 
-  function handleSelectSong(songId: number | string) {
-    if (!isSessionLive) {
-      setRequestSubmitError("This show is no longer live. Find a live DJ or artist to request songs.");
-      return;
+  function handleSelectSong(song: SearchSong) {
+    Keyboard.dismiss();
+    setSelectedSongDraft(song);
+    setSelectedSongId(song.id);
+    if (!hasSession) {
+      setRequestSubmitError("Find a live DJ or artist on the Find tab before requesting songs.");
+    } else if (!isSessionLive) {
+      setRequestSubmitError("This show is no longer accepting requests.");
+    } else {
+      setRequestSubmitError("");
     }
-
-    setRequestSubmitError("");
-    setSelectedSongId(songId);
     if (selectedAmount === customAmountValue && !customAmount) {
       setSelectedAmount("10");
-    }
-    if (sessionId != null) {
-      void sessionRequestsQuery.refetch();
     }
   }
 
   function resetRequestDraft() {
     setSelectedSongId("");
+    setSelectedSongDraft(null);
     setSelectedAmount("10");
     setCustomAmount("");
     setShowShoutoutRequest(false);
     setShoutoutMessage("");
     setSelectedShoutoutAmount("5");
     setCustomShoutoutAmount("");
+    setShowPlayDeadline(false);
+    setSelectedPlayDeadlineMinutes(null);
+    setUseComplimentary(false);
     setRequestSubmitError("");
   }
 
@@ -2052,6 +2504,7 @@ amountChip: {
     setSelectedArtistName(artistName);
     setSelectedAlbumName("");
     setSelectedSongId("");
+    setSelectedSongDraft(null);
     startTransition(() => setQuery(artistName));
   }
 
@@ -2094,14 +2547,12 @@ amountChip: {
   }
 
   function renderSongResult(song: SearchSong, variant: "top" | "list" = "list") {
-    const selected = selectedSong?.id === song.id;
-    const canRequestSong = isSessionLive;
+    const selected = songIdsMatch(selectedSong?.id, song.id);
 
     return (
       <Pressable
         key={song.id}
-        disabled={!canRequestSong}
-        onPress={() => handleSelectSong(song.id)}
+        onPress={() => handleSelectSong(song)}
         style={styles.songResult}
       >
         <View
@@ -2109,7 +2560,6 @@ amountChip: {
             styles.songCard,
             variant === "top" && styles.topResultCard,
             selected && styles.songCardSelected,
-            !canRequestSong && styles.songCardDisabled,
           ]}
         >
           <Image source={{ uri: getSongImageUri(song) }} style={[styles.songImage, variant === "top" && styles.topResultImage]} />
@@ -2123,9 +2573,8 @@ amountChip: {
           </View>
           <Pressable
             accessibilityLabel={`Request ${song.title}`}
-            disabled={!canRequestSong}
-            onPress={() => handleSelectSong(song.id)}
-            style={[styles.songStatus, selected && styles.songStatusSelected, !canRequestSong && styles.songStatusDisabled]}
+            onPress={() => handleSelectSong(song)}
+            style={[styles.songStatus, selected && styles.songStatusSelected]}
           >
             <Ionicons
               name={selected ? "checkmark" : song.external_source === "apple_music" ? "musical-notes" : "add"}
@@ -2287,8 +2736,12 @@ amountChip: {
     try {
       const createdRequest = await createRequestMutation.mutateAsync({
         song_id: Number.isInteger(numericSongId) ? numericSongId : undefined,
-        amount_cents: requestTotalCents,
+        amount_cents: bidCents,
+        shoutout_amount_cents: shoutoutAmountCents,
+        play_deadline_minutes: useComplimentary ? null : showPlayDeadline ? selectedPlayDeadlineMinutes : null,
+        play_deadline_amount_cents: useComplimentary ? 0 : playDeadlineAmountCents,
         note: showShoutoutRequest ? shoutoutMessage.trim() : null,
+        use_complimentary: useComplimentary,
         song: {
           title: selectedSong.title,
           artist: selectedSong.artist,
@@ -2326,6 +2779,26 @@ amountChip: {
 
   return (
     <ScreenShell
+      background={
+        resolvedScheme === "dark" ? (
+          <DarkGrainyGradientBackground
+            amplitude={0.12}
+            animated={shouldAnimateBackground}
+            intensity={0.022}
+            size={5.2}
+            speed={0.85}
+          />
+        ) : (
+          <GrainyGradientBackground
+            amplitude={0.12}
+            animated={shouldAnimateBackground}
+            colors={["#b01818", "#b3aeb9", "#073990"]}
+            intensity={0.022}
+            size={5.2}
+            speed={0.85}
+          />
+        )
+      }
       contentContainerStyle={styles.content}
       edgeToEdgeTop
       scrollRef={scrollRef}
@@ -2335,30 +2808,13 @@ amountChip: {
           onRefresh={() => {
             if (isSignedIn) {
               void myRequestsQuery.refetch();
+              void myTipsQuery.refetch();
             }
           }}
           tintColor="#C95A52"
         />
       }
     >
-      {resolvedScheme === "dark" ? (
-        <DarkGrainyGradientBackground
-          amplitude={0.12}
-          animated
-          intensity={0.022}
-          size={5.2}
-          speed={0.85}
-        />
-      ) : (
-        <GrainyGradientBackground
-          amplitude={0.12}
-          animated
-          colors={["#b01818", "#b3aeb9", "#073990"]}
-          intensity={0.022}
-          size={5.2}
-          speed={0.85}
-        />
-      )}
       <View style={styles.rqstModeTabs}>
         {rqstModeTabs.map((tab) => {
           const selected = rqstModeTab === tab;
@@ -2398,7 +2854,7 @@ amountChip: {
               </Text>
             </SurfaceCard>
           ) : null}
-          <Animated.View style={[styles.searchTopSpacer, { height: searchTopSpacerHeight }]} />
+          <View style={[styles.searchTopSpacer, { height: searchDockSpacerHeight }]} />
           <View style={[styles.searchBarShell, isSearchFocused && styles.searchBarShellFocused]}>
             <LinearGradient
               colors={
@@ -2556,7 +3012,90 @@ amountChip: {
           </View>
           <View style={styles.requestList}>
             {visibleRequests.map((request) => {
+              if (request.kind === "tip") {
+                return (
+                  <SurfaceCard key={request.id} style={[styles.requestCard, styles.queuedRequestCard]}>
+                    <View style={styles.requestTop}>
+                      <View style={styles.requestTitleWrap}>
+                        <View style={styles.tipIconWrap}>
+                          <Ionicons color="#C95A52" name="heart" size={22} />
+                        </View>
+                        <View style={styles.requestTitleCopy}>
+                          <Text numberOfLines={1} style={styles.requestTitle}>
+                            Tip
+                          </Text>
+                          <Text numberOfLines={1} style={styles.requestSubtitle}>
+                            No associated song
+                          </Text>
+                        </View>
+                      </View>
+                      <Tag label={request.tipThanked ? "Thanked" : "Sent"} tone={request.tipThanked ? "mint" : "coral"} />
+                    </View>
+                    <View style={styles.requestContextRow}>
+                      <View style={styles.requestContextItem}>
+                        <Ionicons name="time-outline" size={14} color={theme.colors.inkMuted} />
+                        <Text numberOfLines={1} style={styles.requestContextText}>
+                          {formatRequestDateTime(request.submittedAt)}
+                        </Text>
+                      </View>
+                      <View style={styles.requestContextItem}>
+                        <Ionicons name="location-outline" size={14} color={theme.colors.inkMuted} />
+                        <Text numberOfLines={1} style={styles.requestContextText}>
+                          {request.venue}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.requestDetailGrid}>
+                      <View style={[styles.requestDetailItem, styles.requestDetailItemPrimary]}>
+                        <Text style={styles.requestDetailLabel}>Tip amount</Text>
+                        <Text style={styles.requestDetailValue}>{formatUsd(request.totalCents)}</Text>
+                        <Text style={styles.requestDetailHint}>Went straight to the DJ</Text>
+                      </View>
+                    </View>
+                    <View style={styles.requestYouRow}>
+                      <Text style={styles.requestYouLabel}>Your tip</Text>
+                      <View style={styles.requestYouBreakdown}>
+                        <Text style={styles.requestYouTotal}>{formatUsd(request.myContributionCents)} total</Text>
+                      </View>
+                    </View>
+                  </SurfaceCard>
+                );
+              }
+
               const isPlayed = request.status === "Played";
+              const isTimedOut = request.status === "TimedOut";
+              const isCompleted = isPlayed || isTimedOut;
+              const hasShoutout = requestHasShoutout(request);
+              const showShoutout = hasShoutout;
+              const hasDeadline = (request.playDeadlineAmountCents ?? 0) > 0;
+              const deadlineLabel = formatPlayDeadlineLabel(request.playDeadlineMinutes);
+              const poolSongCents = Math.max(
+                request.songRequestAmountCents ??
+                  request.requestedAmountCents -
+                    (hasShoutout ? request.shoutoutAmountCents ?? 0 : 0) -
+                    (hasDeadline ? request.playDeadlineAmountCents ?? 0 : 0),
+                0,
+              );
+              const mySongCents = request.isOriginalRequester
+                ? Math.max(
+                    request.myOriginalContributionCents -
+                      (hasShoutout ? request.shoutoutAmountCents ?? 0 : 0) -
+                      (hasDeadline ? request.playDeadlineAmountCents ?? 0 : 0),
+                    0,
+                  )
+                : 0;
+              const myShoutoutCents =
+                request.isOriginalRequester && hasShoutout ? (request.shoutoutAmountCents ?? 0) : 0;
+              const shoutoutIncluded = shoutoutCountsTowardTotal(isPlayed, request.shoutoutFulfilled);
+              const displayTotalCents = effectivePoolTotalCents(request, hasShoutout, isPlayed);
+              const showMyShoutoutCents = myShoutoutCents > 0 && shoutoutIncluded && !isTimedOut;
+              const myDeadlineCents =
+                request.isOriginalRequester && hasDeadline ? (request.playDeadlineAmountCents ?? 0) : 0;
+              const effectiveMyTotalCents = isTimedOut
+                ? myDeadlineCents
+                : showMyShoutoutCents
+                  ? request.myContributionCents
+                  : Math.max(request.myContributionCents - myShoutoutCents, 0);
               const backendRequest = myRequestsById.get(Number(request.id));
               const cancelExpiresAt =
                 backendRequest && !expiredCancelIds.has(backendRequest.id)
@@ -2567,9 +3106,11 @@ amountChip: {
                 backendRequest != null &&
                 cancelExpiresAt != null &&
                 canCancelRequest(backendRequest, currentUserId, pendingExpiresById);
+              const showDeadlineCountdown =
+                !isCompleted && hasDeadline && Boolean(request.playDeadlineExpiresAt);
 
               return (
-                <SurfaceCard key={request.id} style={[styles.requestCard, !isPlayed && styles.queuedRequestCard]}>
+                <SurfaceCard key={request.id} style={[styles.requestCard, !isCompleted && styles.queuedRequestCard]}>
                   <View style={styles.requestTop}>
                     <View style={styles.requestTitleWrap}>
                       <Image
@@ -2590,7 +3131,10 @@ amountChip: {
                         </Text>
                       </View>
                     </View>
-                    <Tag label={isPlayed ? "Played" : "Queued"} tone={isPlayed ? "slate" : "mint"} />
+                    <Tag
+                      label={isTimedOut ? "Timed out" : isPlayed ? "Played" : "Queued"}
+                      tone={isTimedOut ? "coral" : isPlayed ? "slate" : "mint"}
+                    />
                   </View>
                   <View style={styles.requestContextRow}>
                     <View style={styles.requestContextItem}>
@@ -2606,33 +3150,211 @@ amountChip: {
                       </Text>
                     </View>
                   </View>
+                  {request.isComplimentary ? (
+                    <View style={styles.complimentaryRequestBanner}>
+                      <Ionicons color="#6d28d9" name="gift-outline" size={16} />
+                      <Text style={styles.complimentaryRequestBannerText}>
+                        Complimentary song · you will not be charged
+                      </Text>
+                    </View>
+                  ) : null}
+                  {showDeadlineCountdown && request.playDeadlineExpiresAt ? (
+                    <View style={styles.deadlineQueuedRow}>
+                      <DeadlineCountdown
+                        expiresAt={request.playDeadlineExpiresAt}
+                        onExpired={() => {
+                          void queryClient.invalidateQueries({ queryKey: ["meRequests"] });
+                          if (sessionId != null) {
+                            void queryClient.invalidateQueries({ queryKey: ["sessionRequests", sessionId] });
+                            void queryClient.invalidateQueries({ queryKey: ["sessionExpiredRequests", sessionId] });
+                          }
+                        }}
+                        variant="badge"
+                      />
+                    </View>
+                  ) : null}
                   <View style={styles.requestDetailGrid}>
                     <View style={[styles.requestDetailItem, styles.requestDetailItemPrimary]}>
-                      <Text style={styles.requestDetailLabel}>Total</Text>
-                      <Text style={styles.requestDetailValue}>{formatUsd(request.totalCents)}</Text>
-                      <Text style={styles.requestDetailHint}>All contributors combined</Text>
+                      <Text style={styles.requestDetailLabel}>{isTimedOut ? "Charged" : "Total"}</Text>
+                      {isPlayed && request.isComplimentary ? (
+                        <View style={styles.complimentaryTotalRow}>
+                          <Text style={styles.complimentaryTotalStruck}>
+                            {formatUsd(displayTotalCents)}
+                          </Text>
+                          <Text style={styles.complimentaryTotalZero}>{formatUsd(0)}</Text>
+                        </View>
+                      ) : (
+                        <Text style={styles.requestDetailValue}>{formatUsd(displayTotalCents)}</Text>
+                      )}
+                      <Text style={styles.requestDetailHint}>
+                        {isTimedOut
+                          ? "Song not charged · timer fee only"
+                          : request.isComplimentary && isPlayed
+                            ? "Complimentary · no charge"
+                            : "All contributors combined"}
+                      </Text>
                     </View>
-                    <View style={styles.requestDetailItem}>
-                      <Text style={styles.requestDetailLabel}>Original</Text>
-                      <Text style={styles.requestDetailValue}>{formatUsd(request.requestedAmountCents)}</Text>
-                    </View>
+                    {isTimedOut ? (
+                      <>
+                        <View style={styles.requestDetailItem}>
+                          <Text style={styles.requestDetailLabel}>Song</Text>
+                          <Text style={[styles.requestDetailValue, styles.requestDetailValueShoutoutExcluded]}>
+                            {formatUsd(poolSongCents)}
+                          </Text>
+                        </View>
+                        <View style={styles.requestDetailItem}>
+                          <Text style={styles.requestDetailLabel}>Timer</Text>
+                          <Text style={styles.requestDetailValue}>
+                            {formatUsd(request.playDeadlineAmountCents ?? 0)}
+                          </Text>
+                        </View>
+                      </>
+                    ) : hasShoutout ? (
+                      <>
+                        <View style={styles.requestDetailItem}>
+                          <Text style={styles.requestDetailLabel}>Song</Text>
+                          <Text style={styles.requestDetailValue}>{formatUsd(poolSongCents)}</Text>
+                        </View>
+                        <View style={styles.requestDetailItem}>
+                          <Text style={styles.requestDetailLabel}>Shoutout</Text>
+                          <Text
+                            style={[
+                              styles.requestDetailValue,
+                              shoutoutIncluded
+                                ? styles.requestDetailValueShoutout
+                                : styles.requestDetailValueShoutoutExcluded,
+                            ]}
+                          >
+                            {shoutoutIncluded
+                              ? formatUsd(request.shoutoutAmountCents ?? 0)
+                              : "Not included"}
+                          </Text>
+                        </View>
+                      </>
+                    ) : (
+                      <View style={styles.requestDetailItem}>
+                        <Text style={styles.requestDetailLabel}>Song</Text>
+                        <Text style={styles.requestDetailValue}>{formatUsd(poolSongCents)}</Text>
+                      </View>
+                    )}
+                    {!isTimedOut && hasDeadline ? (
+                      <View style={styles.requestDetailItem}>
+                        <Text style={styles.requestDetailLabel}>Deadline</Text>
+                        <Text style={styles.requestDetailValue}>
+                          {formatUsd(request.playDeadlineAmountCents ?? 0)}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                   <View style={styles.requestYouRow}>
                     <Text style={styles.requestYouLabel}>Your share</Text>
                     <View style={styles.requestYouBreakdown}>
-                      {request.myOriginalContributionCents > 0 ? (
-                        <Text style={styles.requestYouPart}>Request {formatUsd(request.myOriginalContributionCents)}</Text>
-                      ) : null}
-                      {request.myAddedContributionCents > 0 ? (
-                        <Text style={styles.requestYouPartAdded}>+{formatUsd(request.myAddedContributionCents)} added</Text>
-                      ) : null}
-                      {request.myContributionCents > 0 ? (
-                        <Text style={styles.requestYouTotal}>{formatUsd(request.myContributionCents)} total</Text>
+                      {isTimedOut ? (
+                        <>
+                          <Text style={styles.requestYouPart}>Song not charged</Text>
+                          {myDeadlineCents > 0 ? (
+                            <Text style={styles.requestYouPartAdded}>
+                              Timer charged {formatUsd(myDeadlineCents)}
+                            </Text>
+                          ) : null}
+                        </>
+                      ) : (
+                        <>
+                          {mySongCents > 0 ? (
+                            <Text style={styles.requestYouPart}>Song {formatUsd(mySongCents)}</Text>
+                          ) : null}
+                          {showMyShoutoutCents ? (
+                            <Text style={styles.requestYouPartShoutout}>Shoutout {formatUsd(myShoutoutCents)}</Text>
+                          ) : null}
+                          {myDeadlineCents > 0 ? (
+                            <Text style={styles.requestYouPartDeadline}>Deadline {formatUsd(myDeadlineCents)}</Text>
+                          ) : null}
+                          {request.myAddedContributionCents > 0 ? (
+                            <Text style={styles.requestYouPartAdded}>+{formatUsd(request.myAddedContributionCents)} added</Text>
+                          ) : null}
+                        </>
+                      )}
+                      {effectiveMyTotalCents > 0 ? (
+                        <Text style={styles.requestYouTotal}>{formatUsd(effectiveMyTotalCents)} total</Text>
                       ) : (
                         <Text style={styles.requestYouTotalMuted}>No contribution yet</Text>
                       )}
                     </View>
                   </View>
+                  {isTimedOut ? (
+                    <View style={styles.timedOutCard}>
+                      <Text style={styles.timedOutLabel}>Not played</Text>
+                      <Text style={styles.timedOutMessage}>
+                        This song timed out and was not played. You were not charged for the song
+                        {hasDeadline
+                          ? `, but the ${deadlineLabel ?? "deadline"} timer fee still applied.`
+                          : "."}
+                      </Text>
+                      <Text style={styles.timedOutPrice}>
+                        Song {formatUsd(poolSongCents)} · not charged
+                      </Text>
+                      {hasDeadline ? (
+                        <Text style={styles.timedOutPrice}>
+                          Timer charged {formatUsd(request.playDeadlineAmountCents ?? 0)}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : null}
+                  {isPlayed && hasDeadline ? (
+                    <View style={styles.deadlinePlayedCard}>
+                      <Text style={styles.deadlinePlayedLabel}>Deadline met</Text>
+                      <Text style={styles.deadlinePlayedMessage}>
+                        Played within the {deadlineLabel ?? "deadline"} window.
+                        {request.playDeadlineRemainingSeconds != null
+                          ? ` ${formatDeadlineSeconds(request.playDeadlineRemainingSeconds)} left.`
+                          : ""}
+                      </Text>
+                      <Text style={styles.deadlinePlayedPrice}>
+                        Timer {formatUsd(request.playDeadlineAmountCents ?? 0)}
+                        {request.playDeadlineElapsedSeconds != null
+                          ? ` · elapsed ${formatDeadlineSeconds(request.playDeadlineElapsedSeconds)}`
+                          : ""}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {showShoutout && !isTimedOut ? (
+                    <View
+                      style={[
+                        styles.playedShoutoutCard,
+                        isPlayed && request.shoutoutFulfilled && styles.playedShoutoutCardIncluded,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.playedShoutoutLabel,
+                          isPlayed && request.shoutoutFulfilled && styles.playedShoutoutLabelIncluded,
+                        ]}
+                      >
+                        Shoutout
+                      </Text>
+                      <Text style={styles.playedShoutoutMessage}>{request.shoutoutMessage}</Text>
+                      <Text
+                        style={[
+                          styles.playedShoutoutPrice,
+                          isPlayed && request.shoutoutFulfilled && styles.playedShoutoutPriceIncluded,
+                        ]}
+                      >
+                        {formatUsd(request.shoutoutAmountCents ?? 0)}
+                      </Text>
+                      {isPlayed ? (
+                        <Text
+                          style={[
+                            styles.playedShoutoutStatus,
+                            request.shoutoutFulfilled && styles.playedShoutoutStatusIncluded,
+                          ]}
+                        >
+                          {request.shoutoutFulfilled
+                            ? "Shoutout read to the crowd"
+                            : "Shoutout not read"}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : null}
                   {showCancelAction && cancelExpiresAt != null ? (
                     <RequestCancelAction
                       expiresAt={cancelExpiresAt}
@@ -2704,6 +3426,18 @@ amountChip: {
                     <Text style={styles.ctaText}>Add a song</Text>
                   </Pressable>
                 ) : null}
+              </SurfaceCard>
+            ) : null}
+            {requestTab === "played" && playedRequests.length === 0 ? (
+              <SurfaceCard style={styles.queuedEmptyState}>
+                <Text style={[styles.emptyTitle, styles.queuedEmptyText]}>
+                  {!hasSession ? "No live show selected" : "Nothing played yet"}
+                </Text>
+                <Text style={[styles.emptySubtitle, styles.queuedEmptyText]}>
+                  {!hasSession
+                    ? "Find a live DJ or artist on the List tab to see your played songs and tips."
+                    : "Played songs and tips you send will show up here."}
+                </Text>
               </SurfaceCard>
             ) : null}
           </View>
@@ -2831,12 +3565,13 @@ amountChip: {
         </View>
       </Modal>
       <Modal
-        animationType="fade"
+        animationType="slide"
         transparent
         presentationStyle="overFullScreen"
-        visible={Boolean(selectedSongId)}
+        visible={selectedSongDraft != null}
         onRequestClose={closeRequestModal}
       >
+        {selectedSongDraft != null ? (
         <Pressable style={styles.requestModalBackdrop} onPress={closeRequestModal}>
           <AnimatedPressable
             style={[styles.requestDrawer, { transform: [{ translateY: requestDrawerTranslateY }] }]}
@@ -2845,6 +3580,13 @@ amountChip: {
             <View style={styles.requestDragArea} {...requestDrawerPanResponder.panHandlers}>
               <View style={styles.requestDrawerHandle} />
             </View>
+            <ScrollView
+              bounces
+              style={styles.requestDrawerScroll}
+              contentContainerStyle={styles.requestDrawerScrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
             <View style={styles.modalHeader}>
               <Text style={styles.modalEyebrow}>
                 {isExistingQueueSong ? "Add to existing request" : "Confirm song request"}
@@ -2897,13 +3639,18 @@ amountChip: {
                 {!isExistingQueueSong && !hasSession ? (
                   <View style={styles.requestTargetPicker}>
                     <Text style={styles.requestTargetEyebrow}>Choose who receives this request</Text>
-                    <DirectorySearch
-                      defaultViewMode="browse"
-                      hideDjActions
-                      liveOnly
-                      selectOnly
-                      onLiveSessionSelected={() => setRequestSubmitError("")}
-                    />
+                    <Text style={styles.sessionNote}>
+                      Join a live show on the Find tab, then come back to request this song.
+                    </Text>
+                    <Pressable
+                      onPress={() => {
+                        closeRequestModal();
+                        router.push("/(tabs)/find");
+                      }}
+                      style={styles.modalPrimaryButton}
+                    >
+                      <Text style={styles.modalPrimaryText}>Go to Find</Text>
+                    </Pressable>
                   </View>
                 ) : null}
 
@@ -2991,19 +3738,112 @@ amountChip: {
               </View>
             ) : null}
 
+            {useComplimentary ? (
+              <View style={styles.complimentaryAlertCard}>
+                <Text style={styles.complimentaryAlertText}>{complimentaryLimitsAlert}</Text>
+              </View>
+            ) : null}
+
             {!isExistingQueueSong ? (
-            <Pressable
-              onPress={() => setShowShoutoutRequest((current) => !current)}
-              style={styles.shoutoutAddButton}
-            >
-              <Ionicons name={showShoutoutRequest ? "close" : "megaphone-outline"} size={13} color="#FFFFFF" />
-              <Text style={styles.shoutoutAddButtonText}>{showShoutoutRequest ? "Remove shoutout" : "Add shoutout"}</Text>
-            </Pressable>
+            <View style={styles.addonButtonRow}>
+              <Pressable
+                onPress={() => setShowShoutoutRequest((current) => !current)}
+                style={styles.shoutoutAddButton}
+              >
+                <Ionicons name={showShoutoutRequest ? "close" : "megaphone-outline"} size={13} color="#FFFFFF" />
+                <Text style={styles.shoutoutAddButtonText}>{showShoutoutRequest ? "Remove shoutout" : "Add shoutout"}</Text>
+              </Pressable>
+              {!useComplimentary ? (
+              <Pressable
+                onPress={() => {
+                  setShowPlayDeadline((current) => {
+                    const next = !current;
+                    if (!next) {
+                      setSelectedPlayDeadlineMinutes(null);
+                    }
+                    return next;
+                  });
+                }}
+                style={styles.shoutoutAddButton}
+              >
+                <Ionicons name={showPlayDeadline ? "close" : "hourglass-outline"} size={13} color="#FFFFFF" />
+                <Text style={styles.shoutoutAddButtonText}>
+                  {showPlayDeadline ? "Remove deadline" : "Set deadline"}
+                </Text>
+              </Pressable>
+              ) : null}
+              {availableComplimentaryCredit ? (
+                <Pressable
+                  onPress={() => {
+                    setUseComplimentary((current) => {
+                      const next = !current;
+                      if (next) {
+                        setShowPlayDeadline(false);
+                        setSelectedPlayDeadlineMinutes(null);
+                        if (bidCents > complimentaryMaxSongCents) {
+                          setSelectedAmount("10");
+                          setCustomAmount("");
+                        }
+                        if (showShoutoutRequest && shoutoutAmountCents > complimentaryMaxShoutoutCents) {
+                          setSelectedShoutoutAmount("10");
+                          setCustomShoutoutAmount("");
+                        }
+                      }
+                      return next;
+                    });
+                  }}
+                  style={[
+                    styles.complimentaryAddButton,
+                    useComplimentary ? styles.complimentaryAddButtonActive : null,
+                  ]}
+                >
+                  <Ionicons name={useComplimentary ? "gift" : "gift-outline"} size={13} color="#FFFFFF" />
+                  <Text style={styles.complimentaryAddButtonText}>
+                    {useComplimentary ? "Using complimentary" : "Complimentary song"}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+            ) : null}
+
+            {!isExistingQueueSong && !useComplimentary && showPlayDeadline ? (
+              <View style={styles.deadlinePanel}>
+                <Text style={styles.deadlineSupportingText}>
+                  Set a countdown timer for your song to get played. You will get charged for the timer but not the song
+                  if it is not played.
+                </Text>
+                <View style={styles.shoutoutAmountRow}>
+                  {playDeadlineOptions.map((option) => {
+                    const selected = selectedPlayDeadlineMinutes === option.minutes;
+
+                    return (
+                      <Pressable
+                        key={option.minutes}
+                        onPress={() => setSelectedPlayDeadlineMinutes(option.minutes)}
+                        style={[styles.deadlineAmountChip, selected && styles.deadlineAmountChipSelected]}
+                      >
+                        <Text
+                          style={[
+                            styles.deadlineAmountChipText,
+                            selected && styles.deadlineAmountChipTextSelected,
+                          ]}
+                        >
+                          {`${option.label} · ${formatUsd(option.amountCents)}`}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
             ) : null}
 
             {!isExistingQueueSong && showShoutoutRequest ? (
               <View style={styles.shoutoutPanel}>
-                <Text style={styles.shoutoutSupportingText}>Request a message for the DJ to shoutout to the crowd.</Text>
+                <Text style={styles.shoutoutSupportingText}>
+                  {useComplimentary
+                    ? "Request a message for the DJ to shoutout to the crowd. Complimentary shoutouts are capped at $20."
+                    : "Request a message for the DJ to shoutout to the crowd."}
+                </Text>
                 <TextInput
                   value={shoutoutMessage}
                   onChangeText={setShoutoutMessage}
@@ -3085,10 +3925,26 @@ amountChip: {
                         : "Choose a live DJ or artist to continue."
                   : !hasSession
                     ? "Select a live DJ or artist above to continue."
+                  : useComplimentary
+                    ? complimentarySongOverLimit
+                      ? "Complimentary songs cannot exceed $50."
+                      : complimentaryShoutoutOverLimit
+                        ? "Complimentary shoutouts cannot exceed $20."
+                        : showShoutoutRequest && !shoutoutMessage.trim()
+                          ? "Add a shoutout message to continue."
+                          : showShoutoutRequest && shoutoutAmountCents <= 0
+                            ? "Choose a shoutout amount to continue."
+                            : canSubmit
+                              ? `Complimentary song · ${formatUsd(requestTotalCents)} · no charge.`
+                              : requestFloorCents != null
+                                ? `Minimum request is ${formatUsd(requestFloorCents)}.`
+                                : "Select a live DJ or artist above to continue."
                   : showShoutoutRequest && !shoutoutMessage.trim()
                   ? "Add a shoutout message to continue."
                   : showShoutoutRequest && shoutoutAmountCents <= 0
                     ? "Choose a shoutout amount to continue."
+                  : showPlayDeadline && selectedPlayDeadlineMinutes == null
+                    ? "Choose a deadline to continue."
                   : canSubmit
                     ? `Your request amount is ${formatUsd(requestTotalCents)}.`
                     : requestFloorCents != null
@@ -3100,7 +3956,11 @@ amountChip: {
                   disabled={!canSubmit || isSubmitPending}
                   onPress={handleSubmitRequest}
                   style={[
-                    isExistingQueueSong ? styles.modalContributeButton : styles.modalPrimaryButton,
+                    isExistingQueueSong
+                      ? styles.modalContributeButton
+                      : useComplimentary
+                        ? styles.modalComplimentaryButton
+                        : styles.modalPrimaryButton,
                     (!canSubmit || isSubmitPending) && styles.ctaDisabled,
                   ]}
                 >
@@ -3111,13 +3971,17 @@ amountChip: {
                         : "Requesting"
                       : isExistingQueueSong
                         ? `Contribute ${formatUsd(bidCents)}`
-                        : "Confirm request"}
+                        : useComplimentary
+                          ? "Confirm complimentary song"
+                          : "Confirm request"}
                   </Text>
                 </Pressable>
               </View>
             </View>
+            </ScrollView>
           </AnimatedPressable>
         </Pressable>
+        ) : null}
       </Modal>
     </ScreenShell>
   );

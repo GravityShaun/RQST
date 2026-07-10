@@ -37,7 +37,7 @@ class ShowEarningsRead(APIModel):
 class LedgerEntryRead(APIModel):
     id: int
     session_id: int
-    song_request_id: int
+    song_request_id: int | None = None
     payment_id: int
     song_title: str | None = None
     song_artist: str | None = None

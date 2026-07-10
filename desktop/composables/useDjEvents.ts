@@ -1,6 +1,8 @@
 import {
   apiRouteBuilders,
   apiRoutes,
+  type ComplimentaryCodeIssue,
+  type ComplimentaryCodeSummary,
   type DjEvent,
   type PlaceSearchResult,
 } from "@rqst/contracts";
@@ -286,6 +288,71 @@ export function useDjEvents() {
     }
   }
 
+  async function listComplimentaryCodes(eventId: number) {
+    return authFetch<ComplimentaryCodeSummary>(
+      routePath(apiRouteBuilders.djEventComplimentaryCodes(eventId)),
+    );
+  }
+
+  async function issueComplimentaryCode(
+    eventId: number,
+    options?: { allowMultipleUsesPerUser?: boolean },
+  ) {
+    saving.value = true;
+    error.value = "";
+    saveMessage.value = "";
+
+    try {
+      const issued = await authFetch<ComplimentaryCodeIssue>(
+        routePath(apiRouteBuilders.djEventComplimentaryCodes(eventId)),
+        {
+          method: "POST",
+          body: JSON.stringify({
+            allow_multiple_uses_per_user: options?.allowMultipleUsesPerUser ?? false,
+          }),
+        },
+      );
+      saveMessage.value = `Complimentary code ${issued.code} ready to share.`;
+      return issued;
+    } catch (issueError) {
+      error.value =
+        issueError instanceof Error ? issueError.message : "Could not issue complimentary code.";
+      throw issueError;
+    } finally {
+      saving.value = false;
+    }
+  }
+
+  async function updateComplimentaryCode(
+    eventId: number,
+    options: { allowMultipleUsesPerUser: boolean },
+  ) {
+    saving.value = true;
+    error.value = "";
+    saveMessage.value = "";
+
+    try {
+      const updated = await authFetch<ComplimentaryCodeIssue>(
+        routePath(apiRouteBuilders.djEventComplimentaryCodes(eventId)),
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            allow_multiple_uses_per_user: options.allowMultipleUsesPerUser,
+          }),
+        },
+      );
+      return updated;
+    } catch (updateError) {
+      error.value =
+        updateError instanceof Error
+          ? updateError.message
+          : "Could not update complimentary code settings.";
+      throw updateError;
+    } finally {
+      saving.value = false;
+    }
+  }
+
   onMounted(() => {
     void refresh();
   });
@@ -305,6 +372,9 @@ export function useDjEvents() {
     updateEvent,
     deleteEvent,
     uploadFlyer,
+    listComplimentaryCodes,
+    issueComplimentaryCode,
+    updateComplimentaryCode,
     upsertEvent,
     resolveAssetUrl: (assetUrl?: string | null) => resolveAssetUrl(config.public.apiBaseUrl, assetUrl),
   };

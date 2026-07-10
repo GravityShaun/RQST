@@ -4,7 +4,7 @@ type ApiErrorBody = {
   detail?: string | { msg?: string }[];
 };
 
-export const EMAIL_ALREADY_EXISTS_MESSAGE = "An account with this email already exists.";
+export const EMAIL_ALREADY_EXISTS_MESSAGE = "An account with this email already exists for this app.";
 
 export type TokenPair = {
   accessToken: string;
@@ -89,7 +89,7 @@ export async function loginWithPassword(
 ): Promise<TokenPair> {
   return authRequest<TokenPair>(apiBaseUrl, routePath(apiRoutes.login), {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, role: "dj" }),
   });
 }
 

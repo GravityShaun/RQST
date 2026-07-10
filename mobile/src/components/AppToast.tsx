@@ -104,7 +104,9 @@ export function AppToast() {
 
   return (
     <>
-      {toast.showConfetti ? <ConfettiOverlay burstKey={toast.id} /> : null}
+      {toast.showConfetti ? (
+        <ConfettiOverlay burstKey={toast.id} emoji={toast.confettiEmoji} />
+      ) : null}
       <View pointerEvents="box-none" style={[styles.container, { top: insets.top + 12 }]}>
       <Animated.View style={{ opacity, transform: [{ translateY }] }} {...panResponder.panHandlers}>
         <View accessibilityRole="alert" style={styles.toast}>

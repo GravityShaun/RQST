@@ -21,6 +21,28 @@ type ApiErrorBody = {
   detail?: string | { msg?: string }[];
 };
 
+export class AuthRequestError extends Error {
+  readonly status: number | null;
+
+  constructor(message: string, status: number | null = null) {
+    super(message);
+    this.name = "AuthRequestError";
+    this.status = status;
+  }
+
+  get isUnauthorized(): boolean {
+    return this.status === 401 || this.status === 403;
+  }
+
+  get isNetworkError(): boolean {
+    return this.status === null;
+  }
+}
+
+export function isAuthRequestError(error: unknown): error is AuthRequestError {
+  return error instanceof AuthRequestError;
+}
+
 function toCamelCase(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(toCamelCase);
@@ -56,13 +78,13 @@ function parseApiError(status: number, body: ApiErrorBody): string {
   }
 
   if (status === 409) {
-    return "An account with this email already exists.";
+    return "An account with this email already exists for this app.";
   }
 
   return `Request failed with status ${status}.`;
 }
 
-async function authRequest<T>(path: string, init: RequestInit): Promise<T> {
+async function authRequest<T>(path: string, init: RequestInit, timeoutMs = 10_000): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
 
@@ -70,10 +92,30 @@ async function authRequest<T>(path: string, init: RequestInit): Promise<T> {
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers,
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, {
+      ...init,
+      headers,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new AuthRequestError(
+        "Could not reach the RQST server. Check that the backend is running.",
+        null,
+      );
+    }
+    throw new AuthRequestError(
+      error instanceof Error ? error.message : "Network request failed.",
+      null,
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     let message = `Request failed with status ${response.status}.`;
@@ -85,7 +127,7 @@ async function authRequest<T>(path: string, init: RequestInit): Promise<T> {
       message = parseApiError(response.status, {});
     }
 
-    throw new Error(message);
+    throw new AuthRequestError(message, response.status);
   }
 
   if (response.status === 204) {
@@ -98,7 +140,7 @@ async function authRequest<T>(path: string, init: RequestInit): Promise<T> {
 export async function loginWithPassword(email: string, password: string): Promise<TokenPair> {
   return authRequest<TokenPair>(routePath(apiRoutes.login), {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, role: "listener" }),
   });
 }
 

@@ -142,6 +142,54 @@ def get_session_queue(db: Session, session_id: int) -> list[SongRequest]:
     return list(db.scalars(stmt))
 
 
+def get_session_played_requests(db: Session, session_id: int) -> list[SongRequest]:
+    session = db.get(DJSession, session_id)
+    if session is None:
+        return []
+
+    filters = [
+        SongRequest.session_id == session_id,
+        SongRequest.status == RequestStatus.PLAYED,
+    ]
+    if session.event_id is not None:
+        filters.append(SongRequest.event_id == session.event_id)
+
+    stmt = (
+        select(SongRequest)
+        .where(*filters)
+        .order_by(
+            SongRequest.played_at.asc(),
+            SongRequest.created_at.asc(),
+            SongRequest.id.asc(),
+        )
+    )
+    return list(db.scalars(stmt))
+
+
+def get_session_expired_requests(db: Session, session_id: int) -> list[SongRequest]:
+    session = db.get(DJSession, session_id)
+    if session is None:
+        return []
+
+    filters = [
+        SongRequest.session_id == session_id,
+        SongRequest.status == RequestStatus.EXPIRED,
+    ]
+    if session.event_id is not None:
+        filters.append(SongRequest.event_id == session.event_id)
+
+    stmt = (
+        select(SongRequest)
+        .where(*filters)
+        .order_by(
+            SongRequest.expired_at.asc(),
+            SongRequest.created_at.asc(),
+            SongRequest.id.asc(),
+        )
+    )
+    return list(db.scalars(stmt))
+
+
 def find_active_song_request(db: Session, session: DJSession, song_id: int) -> SongRequest | None:
     filters = [
         SongRequest.session_id == session.id,
@@ -159,6 +207,7 @@ def build_request_read(
     request: SongRequest,
     *,
     current_user_id: int | None = None,
+    include_dj_fields: bool = False,
 ) -> RequestRead:
     song = db.get(Song, request.song_id)
     session = db.get(DJSession, request.session_id)
@@ -214,6 +263,13 @@ def build_request_read(
         for item in individual_contributor_reads
         if current_user_id is not None and item.user_id == current_user_id and not item.is_initial
     ]
+    include_requester_shoutout = (
+        current_user_id is not None
+        and current_user_id == request.requested_by_user_id
+        and (request.shoutout_amount_cents or 0) > 0
+        and bool(request.note)
+    )
+    include_shoutout_fields = include_dj_fields or include_requester_shoutout
 
     return RequestRead(
         id=request.id,
@@ -224,7 +280,15 @@ def build_request_read(
         original_amount_cents=request.original_amount_cents,
         total_amount_cents=request.total_amount_cents,
         currency=request.currency,
-        note=request.note,
+        note=request.note if include_shoutout_fields else None,
+        shoutout_amount_cents=request.shoutout_amount_cents if include_shoutout_fields else 0,
+        shoutout_fulfilled=request.shoutout_fulfilled if include_shoutout_fields else None,
+        play_deadline_minutes=request.play_deadline_minutes,
+        play_deadline_amount_cents=request.play_deadline_amount_cents or 0,
+        play_deadline_expires_at=request.play_deadline_expires_at,
+        play_deadline_remaining_seconds=request.play_deadline_remaining_seconds,
+        play_deadline_elapsed_seconds=request.play_deadline_elapsed_seconds,
+        expired_at=request.expired_at,
         rank_snapshot=request.rank_snapshot,
         confirmed_by_dj_at=request.confirmed_by_dj_at,
         played_at=request.played_at,
@@ -256,6 +320,14 @@ def build_request_read(
         latest_payment_status=latest_payment.status if latest_payment else None,
         checkout_url=latest_payment.checkout_url if latest_payment else None,
         contributors=contributor_reads,
+        is_complimentary=bool(request.is_complimentary)
+        if include_dj_fields
+        or (
+            current_user_id is not None
+            and current_user_id == request.requested_by_user_id
+            and bool(request.is_complimentary)
+        )
+        else False,
     )
 
 
@@ -264,5 +336,9 @@ def build_request_reads(
     requests: list[SongRequest],
     *,
     current_user_id: int | None = None,
+    include_dj_fields: bool = False,
 ) -> list[RequestRead]:
-    return [build_request_read(db, item, current_user_id=current_user_id) for item in requests]
+    return [
+        build_request_read(db, item, current_user_id=current_user_id, include_dj_fields=include_dj_fields)
+        for item in requests
+    ]

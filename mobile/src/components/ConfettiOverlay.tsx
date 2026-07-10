@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Dimensions, StyleSheet, View } from "react-native";
+import { Dimensions, StyleSheet, Text, View } from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -28,7 +28,7 @@ const ANIMATION_DURATION_MS = 2_400;
 const MAX_PIECE_DELAY_MS = 320;
 const CLEANUP_BUFFER_MS = 300;
 
-type PieceShape = "circle" | "rect" | "strip";
+type PieceShape = "circle" | "rect" | "strip" | "emoji";
 
 type BurstConfig = {
   burstDelayMs: number;
@@ -52,6 +52,7 @@ type ConfettiPieceConfig = {
   burstDelayMs: number;
   color: string;
   delayMs: number;
+  emoji?: string;
   gravity: number;
   height: number;
   shape: PieceShape;
@@ -69,16 +70,30 @@ function seededValue(seed: number, multiplier: number, offset: number) {
   return value - Math.floor(value);
 }
 
-function buildPieceConfig(burstIndex: number, pieceIndex: number, burst: BurstConfig): ConfettiPieceConfig {
+function buildPieceConfig(
+  burstIndex: number,
+  pieceIndex: number,
+  burst: BurstConfig,
+  emoji?: string,
+): ConfettiPieceConfig {
   const seed = burstIndex * 1_000 + pieceIndex + 1;
   const angle = seededValue(seed, 12.9898, 0.357) * Math.PI * 2;
   const speed = 0.55 + seededValue(seed, 78.233, 1.113) * 0.95;
   const shapeRoll = seededValue(seed, 43.758, 2.417);
-  const shape: PieceShape = shapeRoll < 0.34 ? "circle" : shapeRoll < 0.67 ? "strip" : "rect";
+  let shape: PieceShape = shapeRoll < 0.34 ? "circle" : shapeRoll < 0.67 ? "strip" : "rect";
+
+  // Mostly emoji pieces, with a smaller share of classic confetti shapes mixed in.
+  if (emoji && shapeRoll < 0.72) {
+    shape = "emoji";
+  }
 
   let width = 5;
   let height = 5;
-  if (shape === "circle") {
+  if (shape === "emoji") {
+    const size = (16 + seededValue(seed, 19.19, 3.14) * 14) * burst.sizeScale;
+    width = size;
+    height = size;
+  } else if (shape === "circle") {
     const size = (5 + seededValue(seed, 19.19, 3.14) * 7) * burst.sizeScale;
     width = size;
     height = size;
@@ -94,6 +109,7 @@ function buildPieceConfig(burstIndex: number, pieceIndex: number, burst: BurstCo
     burstDelayMs: burst.burstDelayMs,
     color: CONFETTI_COLORS[(burstIndex * 17 + pieceIndex) % CONFETTI_COLORS.length],
     delayMs: seededValue(seed, 55.555, 1.9) * MAX_PIECE_DELAY_MS,
+    emoji: shape === "emoji" ? emoji : undefined,
     gravity: 1.6 + seededValue(seed, 22.22, 8.3) * 1.1,
     height,
     shape,
@@ -108,6 +124,9 @@ function buildPieceConfig(burstIndex: number, pieceIndex: number, burst: BurstCo
 }
 
 function getPieceShapeStyle(shape: PieceShape, width: number, height: number) {
+  if (shape === "emoji") {
+    return { height, width };
+  }
   if (shape === "circle") {
     return { borderRadius: width / 2, height, width };
   }
@@ -162,6 +181,28 @@ function ConfettiPiece({
     };
   });
 
+  if (config.shape === "emoji" && config.emoji) {
+    return (
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.piece,
+          {
+            left: originX - config.width / 2,
+            top: originY,
+            height: config.height,
+            width: config.width,
+          },
+          animatedStyle,
+        ]}
+      >
+        <Text style={{ fontSize: config.width * 0.85, lineHeight: config.height, textAlign: "center" }}>
+          {config.emoji}
+        </Text>
+      </Animated.View>
+    );
+  }
+
   return (
     <Animated.View
       pointerEvents="none"
@@ -183,14 +224,18 @@ type ConfettiBurstProps = {
   burst: BurstConfig;
   burstIndex: number;
   burstKey: number;
+  emoji?: string;
   screenHeight: number;
   screenWidth: number;
 };
 
-function ConfettiBurst({ burst, burstIndex, burstKey, screenHeight, screenWidth }: ConfettiBurstProps) {
+function ConfettiBurst({ burst, burstIndex, burstKey, emoji, screenHeight, screenWidth }: ConfettiBurstProps) {
   const pieces = useMemo(
-    () => Array.from({ length: burst.pieceCount }, (_, pieceIndex) => buildPieceConfig(burstIndex, pieceIndex, burst)),
-    [burst, burstIndex],
+    () =>
+      Array.from({ length: burst.pieceCount }, (_, pieceIndex) =>
+        buildPieceConfig(burstIndex, pieceIndex, burst, emoji),
+      ),
+    [burst, burstIndex, emoji],
   );
   const originX = screenWidth * burst.originXRatio;
   const originY = screenHeight * burst.originYRatio;
@@ -213,9 +258,10 @@ function ConfettiBurst({ burst, burstIndex, burstKey, screenHeight, screenWidth 
 
 type ConfettiOverlayProps = {
   burstKey: number;
+  emoji?: string;
 };
 
-export function ConfettiOverlay({ burstKey }: ConfettiOverlayProps) {
+export function ConfettiOverlay({ burstKey, emoji }: ConfettiOverlayProps) {
   const [isVisible, setIsVisible] = useState(true);
   const { height: screenHeight, width: screenWidth } = Dimensions.get("window");
   const lastBurstDelayMs = Math.max(...BURST_CONFIGS.map((burst) => burst.burstDelayMs));
@@ -244,6 +290,7 @@ export function ConfettiOverlay({ burstKey }: ConfettiOverlayProps) {
           burst={burst}
           burstIndex={burstIndex}
           burstKey={burstKey}
+          emoji={emoji}
           screenHeight={screenHeight}
           screenWidth={screenWidth}
         />

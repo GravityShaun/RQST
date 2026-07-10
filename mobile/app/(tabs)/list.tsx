@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, router, useLocalSearchParams, type Href } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import { formatUsd } from "@rqst/shared-config";
-import { apiRouteBuilders, apiRoutes, type SongRequestSummary } from "@rqst/contracts";
+import { apiRouteBuilders, apiRoutes, type SongRequestSummary, type TipSummary } from "@rqst/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsFocused, useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -11,15 +11,17 @@ import { usePremiumTheme, useResolvedColorScheme, useThemedStyles } from "../../
 
 import { ScreenShell, SectionTitle, SurfaceCard, Tag } from "../../src/components/premium-ui";
 import { RequestCancelAction } from "../../src/components/RequestCancelAction";
+import { DeadlineCountdown } from "../../src/components/PlayDeadline";
 import { DirectorySearch } from "../../src/features/discover/DirectorySearch";
 import { type QueueItem, type RequesterContribution } from "../../src/features/rqst/mock-data";
-import { rqstApi, type ContributionCreatePayload } from "../../src/lib/rqst-api";
-import { isActiveQueueStatus } from "../../src/lib/SessionQueueSync";
+import { rqstApi, type ContributionCreatePayload, type TipCreatePayload } from "../../src/lib/rqst-api";
+import { isActiveQueueStatus, isExpiredQueueStatus, isPlayedQueueStatus } from "../../src/lib/SessionQueueSync";
 import { canCancelRequest, getPendingCancelExpiresAt } from "../../src/lib/request-cancel";
 import { useRequestCancel } from "../../src/lib/use-request-cancel";
 import { useActiveSession } from "../../src/lib/use-active-session";
 import { useAuthStore } from "../../src/store/auth";
 import { usePendingCancelStore } from "../../src/store/pending-cancel";
+import { useToastStore } from "../../src/store/toast";
 import { resolveAvatarUrl } from "../../src/lib/avatar";
 import { unsplashImages } from "../../src/lib/unsplash";
 
@@ -75,6 +77,36 @@ function aggregateContributorsByUser(
   return Array.from(byUserId.values());
 }
 
+function isPlayedQueueItem(item: QueueItem) {
+  return isPlayedQueueStatus(item.status as SongRequestSummary["status"]);
+}
+
+function isExpiredQueueItem(item: QueueItem) {
+  return isExpiredQueueStatus(item.status as SongRequestSummary["status"]);
+}
+
+function isInactiveQueueItem(item: QueueItem) {
+  return isPlayedQueueItem(item) || isExpiredQueueItem(item);
+}
+
+function sortQueueItems(items: QueueItem[], sortKey: SortKey, sortDirection: SortDirection) {
+  return [...items].sort((left, right) => {
+    const directionMultiplier = sortDirection === "asc" ? 1 : -1;
+    const fallbackSort = left.rank - right.rank;
+    let result = 0;
+
+    if (sortKey === "song") {
+      result = `${left.title} ${left.artist}`.localeCompare(`${right.title} ${right.artist}`);
+    } else if (sortKey === "rqsts") {
+      result = left.contributors - right.contributors;
+    } else {
+      result = left.totalCents - right.totalCents;
+    }
+
+    return result === 0 ? fallbackSort : result * directionMultiplier;
+  });
+}
+
 function mapBackendQueueItem(request: SongRequestSummary, index: number): QueueItem {
   const mappedContributors = aggregateContributorsByUser(request);
   const fallbackRequester: RequesterContribution = {
@@ -103,6 +135,7 @@ function mapBackendQueueItem(request: SongRequestSummary, index: number): QueueI
     requestedBy,
     status: request.status === "pending_payment" ? "Pending" : request.status === "open" ? "Open" : request.status,
     momentum: request.createdAt,
+    playDeadlineExpiresAt: request.playDeadlineExpiresAt ?? null,
     imageUri: request.songAlbumArtUrl ?? undefined,
     uploadedBy:
       requestedBy[0] ??
@@ -117,7 +150,8 @@ export default function ListScreen() {
     StyleSheet.create({
 actionColumn: {
     alignItems: "flex-end",
-    width: 30,
+    marginLeft: 8,
+    width: 34,
   },
   amountOption: {
     backgroundColor: activeTheme.colors.surface,
@@ -159,6 +193,27 @@ actionColumn: {
   },
   arrowButtonDisabled: {
     opacity: 0.4,
+  },
+  playedLabel: {
+    color: "#C95A52",
+    fontSize: 9,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  playedRqstsCell: {
+    color: activeTheme.colors.inkMuted,
+  },
+  playedSongArtist: {
+    color: activeTheme.colors.inkMuted,
+  },
+  playedSongTitle: {
+    color: activeTheme.colors.inkMuted,
+  },
+  playedSupportCell: {
+    color: activeTheme.colors.inkMuted,
+  },
+  tableRowPlayed: {
+    opacity: 0.55,
   },
   circleButton: {
     alignItems: "center",
@@ -604,6 +659,7 @@ actionColumn: {
   });
   const isSignedIn = useAuthStore((state) => state.status === "authenticated" && Boolean(state.accessToken));
   const currentUserId = useAuthStore((state) => state.user?.id ?? null);
+  const showToast = useToastStore((state) => state.showToast);
   const { cancelRequest } = useRequestCancel();
   const pendingExpiresById = usePendingCancelStore((state) => state.expiresByRequestId);
   const pruneExpiredPendingCancels = usePendingCancelStore((state) => state.pruneExpired);
@@ -612,6 +668,10 @@ actionColumn: {
   const [selectedRequesterSongId, setSelectedRequesterSongId] = useState<string | null>(null);
   const [selectedAmount, setSelectedAmount] = useState("10");
   const [customAmount, setCustomAmount] = useState("");
+  const [isTipModalOpen, setIsTipModalOpen] = useState(false);
+  const [tipSelectedAmount, setTipSelectedAmount] = useState("10");
+  const [tipCustomAmount, setTipCustomAmount] = useState("");
+  const [tipError, setTipError] = useState("");
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("price");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -624,6 +684,30 @@ actionColumn: {
       rqstApi<SongRequestSummary[]>(apiRouteBuilders.sessionRequests(sessionId as number).replace("/api/v1", ""), {
         auth: false,
       }),
+    enabled: sessionId != null,
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+  });
+  const sessionPlayedRequestsQuery = useQuery({
+    queryKey: ["sessionPlayedRequests", sessionId],
+    queryFn: () =>
+      rqstApi<SongRequestSummary[]>(
+        apiRouteBuilders.sessionPlayedRequests(sessionId as number).replace("/api/v1", ""),
+        { auth: false },
+      ),
+    enabled: sessionId != null,
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+  });
+  const sessionExpiredRequestsQuery = useQuery({
+    queryKey: ["sessionExpiredRequests", sessionId],
+    queryFn: () =>
+      rqstApi<SongRequestSummary[]>(
+        apiRouteBuilders.sessionExpiredRequests(sessionId as number).replace("/api/v1", ""),
+        { auth: false },
+      ),
     enabled: sessionId != null,
     retry: false,
     staleTime: 0,
@@ -652,47 +736,92 @@ actionColumn: {
     },
     retry: false,
   });
+  const tipMutation = useMutation({
+    mutationFn: (amountCents: number) =>
+      rqstApi<TipSummary>(apiRouteBuilders.sessionTips(sessionId as number).replace("/api/v1", ""), {
+        method: "POST",
+        body: JSON.stringify({ amount_cents: amountCents } satisfies TipCreatePayload),
+      }),
+    onSuccess: (tip) => {
+      queryClient.invalidateQueries({ queryKey: ["sessionTips", sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["meTips"] });
+      setIsTipModalOpen(false);
+      setTipSelectedAmount("10");
+      setTipCustomAmount("");
+      setTipError("");
+      showToast({
+        title: "Tip sent",
+        message: `${formatUsd(tip.amountCents)} went straight to ${djName ?? "the DJ"}.`,
+        durationMs: 6_000,
+      });
+    },
+    retry: false,
+  });
   const sessionRequestsById = useMemo(
     () =>
       new Map(
-        (sessionRequestsQuery.data ?? [])
+        [...(sessionRequestsQuery.data ?? []), ...(sessionPlayedRequestsQuery.data ?? []), ...(sessionExpiredRequestsQuery.data ?? [])]
           .filter((request) => request.sessionId === sessionId)
           .map((request) => [request.id, request]),
       ),
-    [sessionId, sessionRequestsQuery.data],
+    [sessionId, sessionExpiredRequestsQuery.data, sessionPlayedRequestsQuery.data, sessionRequestsQuery.data],
   );
   const queue = useMemo(() => {
-    if (!hasSession || sessionId == null || !sessionRequestsQuery.data) {
+    if (!hasSession || sessionId == null) {
       return [];
     }
 
-    return sessionRequestsQuery.data
-      .filter(
-        (request) =>
-          request.sessionId === sessionId &&
-          isActiveQueueStatus(request.status) &&
-          (activeEventId == null || request.eventId === activeEventId),
-      )
-      .map((request, index) => mapBackendQueueItem(request, index));
-  }, [activeEventId, hasSession, sessionId, sessionRequestsQuery.data]);
+    const activeRequests = (sessionRequestsQuery.data ?? []).filter(
+      (request) =>
+        request.sessionId === sessionId &&
+        isActiveQueueStatus(request.status) &&
+        (activeEventId == null || request.eventId === activeEventId),
+    );
+    const playedRequests = (sessionPlayedRequestsQuery.data ?? []).filter(
+      (request) =>
+        request.sessionId === sessionId &&
+        isPlayedQueueStatus(request.status) &&
+        (activeEventId == null || request.eventId === activeEventId),
+    );
+    const expiredRequests = (sessionExpiredRequestsQuery.data ?? []).filter(
+      (request) =>
+        request.sessionId === sessionId &&
+        isExpiredQueueStatus(request.status) &&
+        (activeEventId == null || request.eventId === activeEventId),
+    );
+
+    return [...activeRequests, ...playedRequests, ...expiredRequests].map((request, index) =>
+      mapBackendQueueItem(request, index),
+    );
+  }, [
+    activeEventId,
+    hasSession,
+    sessionId,
+    sessionExpiredRequestsQuery.data,
+    sessionPlayedRequestsQuery.data,
+    sessionRequestsQuery.data,
+  ]);
 
   const sortedQueue = useMemo(() => {
-    return [...queue].sort((left, right) => {
-      const directionMultiplier = sortDirection === "asc" ? 1 : -1;
-      const fallbackSort = left.rank - right.rank;
-      let result = 0;
+    const activeItems = queue.filter((item) => !isInactiveQueueItem(item));
+    const playedItems = queue.filter((item) => isPlayedQueueItem(item));
+    const expiredItems = queue.filter((item) => isExpiredQueueItem(item));
 
-      if (sortKey === "song") {
-        result = `${left.title} ${left.artist}`.localeCompare(`${right.title} ${right.artist}`);
-      } else if (sortKey === "rqsts") {
-        result = left.contributors - right.contributors;
-      } else {
-        result = left.totalCents - right.totalCents;
-      }
-
-      return result === 0 ? fallbackSort : result * directionMultiplier;
-    });
+    return [
+      ...sortQueueItems(activeItems, sortKey, sortDirection),
+      ...sortQueueItems(playedItems, "price", "desc"),
+      ...sortQueueItems(expiredItems, "price", "desc"),
+    ];
   }, [queue, sortDirection, sortKey]);
+
+  useEffect(() => {
+    if (isScreenFocused) {
+      return;
+    }
+
+    setSortKey("price");
+    setSortDirection("desc");
+  }, [isScreenFocused]);
 
   useEffect(() => {
     pruneExpiredPendingCancels();
@@ -703,7 +832,17 @@ actionColumn: {
     return () => clearInterval(interval);
   }, [pruneExpiredPendingCancels]);
 
-  const refreshSessionQueue = sessionRequestsQuery.refetch;
+  const refreshSessionQueue = useCallback(async () => {
+    if (sessionId == null) {
+      return;
+    }
+
+    await Promise.all([
+      queryClient.refetchQueries({ queryKey: ["sessionRequests", sessionId] }),
+      queryClient.refetchQueries({ queryKey: ["sessionPlayedRequests", sessionId] }),
+      queryClient.refetchQueries({ queryKey: ["sessionExpiredRequests", sessionId] }),
+    ]);
+  }, [queryClient, sessionId]);
 
   useEffect(() => {
     if (!isScreenFocused || sessionId == null) {
@@ -719,11 +858,20 @@ actionColumn: {
     setContributionError("");
     if (sessionId != null) {
       queryClient.setQueryData(["sessionRequests", sessionId], []);
+      queryClient.setQueryData(["sessionPlayedRequests", sessionId], []);
+      queryClient.setQueryData(["sessionExpiredRequests", sessionId], []);
       queryClient.removeQueries({
         queryKey: ["sessionRequests"],
         predicate: (query) => query.queryKey[1] !== sessionId,
       });
-      void queryClient.invalidateQueries({ queryKey: ["sessionRequests", sessionId] });
+      queryClient.removeQueries({
+        queryKey: ["sessionPlayedRequests"],
+        predicate: (query) => query.queryKey[1] !== sessionId,
+      });
+      queryClient.removeQueries({
+        queryKey: ["sessionExpiredRequests"],
+        predicate: (query) => query.queryKey[1] !== sessionId,
+      });
     }
   }, [queryClient, sessionId]);
 
@@ -764,8 +912,39 @@ actionColumn: {
   }, [requesterSortDirection, requesterSortKey, selectedRequesterSong]);
   const modalAmountDollars = customAmount ? Number(customAmount || 0) : Number(selectedAmount || 0);
   const modalAmountCents = Math.max(Number.isFinite(modalAmountDollars) ? modalAmountDollars : 0, 0) * 100;
+  const tipAmountDollars = tipCustomAmount ? Number(tipCustomAmount || 0) : Number(tipSelectedAmount || 0);
+  const tipAmountCents = Math.max(Number.isFinite(tipAmountDollars) ? tipAmountDollars : 0, 0) * 100;
   const canSubmitContribution =
     isSessionLive && Boolean(selectedSong) && selectedSong?.status === "Open" && modalAmountCents > 0;
+  const canSubmitTip = hasSession && isSessionLive && tipAmountCents > 0;
+  const openTipModal = () => {
+    if (!hasSession) {
+      setIsPickerOpen(true);
+      return;
+    }
+    setTipError("");
+    setTipSelectedAmount("10");
+    setTipCustomAmount("");
+    setIsTipModalOpen(true);
+  };
+  const handleSubmitTip = async () => {
+    if (!canSubmitTip || sessionId == null) {
+      return;
+    }
+
+    setTipError("");
+    if (!isSignedIn) {
+      setTipError("Sign in is required to tip the DJ.");
+      router.push("/(auth)/login");
+      return;
+    }
+
+    try {
+      await tipMutation.mutateAsync(tipAmountCents);
+    } catch (error) {
+      setTipError(error instanceof Error ? error.message : "Could not send this tip. Please try again.");
+    }
+  };
   const handleSubmitContribution = async () => {
     if (!selectedSong || !canSubmitContribution) {
       return;
@@ -798,18 +977,35 @@ actionColumn: {
 
     setContributionError("This song is no longer in the live queue.");
   };
+  const openProfile = (requester: RequesterContribution) => {
+    router.push({
+      pathname: "/profile/[id]",
+      params: {
+        id: requester.id,
+        name: requester.name,
+        handle: requester.handle,
+        imageUri: requester.imageUri,
+        bio: requester.bio || "",
+        neighborhood: requester.neighborhood || "",
+        topSong: requester.topSong || "",
+        requestsMade: String(requester.requestsMade ?? 0),
+        boostsGiven: String(requester.boostsGiven ?? 0),
+      },
+    } as Href);
+  };
   const openRequesters = (itemId: string) => {
     const item = queue.find((queueItem) => queueItem.id === itemId);
     if (!item) {
       return;
     }
 
-    if (item.contributors === 0) {
+    const requesters = item.requestedBy;
+    if (requesters.length === 0) {
       return;
     }
 
-    if (item.contributors === 1) {
-      router.push(`/profile/${item.requestedBy[0].id}` as Href);
+    if (requesters.length === 1) {
+      openProfile(requesters[0]);
       return;
     }
 
@@ -876,9 +1072,13 @@ actionColumn: {
       contentContainerStyle={styles.screenContent}
       refreshControl={
         <RefreshControl
-          refreshing={sessionRequestsQuery.isRefetching}
+          refreshing={
+            sessionRequestsQuery.isRefetching ||
+            sessionPlayedRequestsQuery.isRefetching ||
+            sessionExpiredRequestsQuery.isRefetching
+          }
           onRefresh={() => {
-            void sessionRequestsQuery.refetch();
+            void refreshSessionQueue();
           }}
           tintColor="#C95A52"
         />
@@ -887,8 +1087,13 @@ actionColumn: {
       <View style={styles.contentInset}>
         <View style={styles.topBar}>
           <View style={styles.topBarLeft}>
-            <Pressable style={[styles.circleButton, styles.circleButtonLight]}>
-              <Ionicons name="sparkles" size={20} color={theme.colors.background} />
+            <Pressable
+              accessibilityLabel="Tip the DJ"
+              accessibilityRole="button"
+              onPress={openTipModal}
+              style={[styles.circleButton, styles.circleButtonLight]}
+            >
+              <Ionicons name="heart" size={20} color="#FFFFFF" />
             </Pressable>
             <Pressable
               accessibilityLabel="Find a DJ or venue"
@@ -978,29 +1183,40 @@ actionColumn: {
               </View>
 
               {sortedQueue.map((item) => {
+                const isPlayed = isPlayedQueueItem(item);
+                const isExpired = isExpiredQueueItem(item);
+                const isInactive = isInactiveQueueItem(item);
                 const backendRequest = sessionRequestsById.get(Number(item.id));
                 const cancelExpiresAt =
                   backendRequest && !expiredCancelIds.has(backendRequest.id)
                     ? getPendingCancelExpiresAt(backendRequest.id, pendingExpiresById)
                     : null;
                 const showCancelAction =
+                  !isInactive &&
                   backendRequest != null &&
                   cancelExpiresAt != null &&
                   canCancelRequest(backendRequest, currentUserId, pendingExpiresById);
+                const canContribute = isSessionLive && !isInactive;
+                const showDeadlineCountdown =
+                  !isInactive && item.playDeadlineExpiresAt && item.status !== "Pending";
 
                 return (
-                  <View key={item.id} style={[styles.tableRow, styles.tableBodyDivider]}>
+                  <View
+                    key={item.id}
+                    style={[styles.tableRow, styles.tableBodyDivider, isInactive && styles.tableRowPlayed]}
+                  >
                   <Pressable
                     accessibilityLabel={
-                      item.contributors === 1
+                      item.requestedBy.length === 1
                         ? `Open ${item.requestedBy[0].name}'s profile`
-                        : `Show ${item.contributors} requesters for ${item.title}`
+                        : `Show ${item.requestedBy.length} requesters for ${item.title}`
                     }
                     accessibilityRole="button"
+                    hitSlop={8}
                     onPress={() => openRequesters(item.id)}
                     style={styles.rqstsButton}
                   >
-                    <Text style={styles.rqstsCell}>{item.contributors}</Text>
+                    <Text style={[styles.rqstsCell, isInactive && styles.playedRqstsCell]}>{item.contributors}</Text>
                     <Image
                       resizeMode="cover"
                       source={{ uri: item.requestedBy[0]?.imageUri ?? item.uploadedBy.imageUri }}
@@ -1008,12 +1224,20 @@ actionColumn: {
                     />
                   </Pressable>
                   <View style={styles.songColumn}>
-                    <Text style={styles.songTitle}>
+                    <Text style={[styles.songTitle, isInactive && styles.playedSongTitle]}>
                       {item.title}
                     </Text>
-                    <Text style={styles.songArtist} numberOfLines={1}>
+                    <Text style={[styles.songArtist, isInactive && styles.playedSongArtist]} numberOfLines={1}>
                       {item.artist}
                     </Text>
+                    {showDeadlineCountdown && item.playDeadlineExpiresAt ? (
+                      <DeadlineCountdown expiresAt={item.playDeadlineExpiresAt} variant="badge" />
+                    ) : null}
+                    {isExpired ? (
+                      <Text style={{ color: "#B42318", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                        Timed out
+                      </Text>
+                    ) : null}
                     {showCancelAction && cancelExpiresAt != null ? (
                       <RequestCancelAction
                         expiresAt={cancelExpiresAt}
@@ -1030,26 +1254,37 @@ actionColumn: {
                       />
                     ) : null}
                   </View>
-                  <Text style={[styles.tableCell, styles.priceColumn, styles.supportCell]}>
+                  <Text
+                    style={[
+                      styles.tableCell,
+                      styles.priceColumn,
+                      styles.supportCell,
+                      isInactive && styles.playedSupportCell,
+                    ]}
+                  >
                     {formatUsd(item.totalCents)}
                   </Text>
                   <View style={styles.actionColumn}>
-                    <Pressable
-                      disabled={!isSessionLive}
-                      onPress={() => {
-                        if (!isSessionLive) {
-                          return;
-                        }
+                    {isPlayed ? (
+                      <Text style={styles.playedLabel}>played</Text>
+                    ) : (
+                      <Pressable
+                        disabled={!canContribute}
+                        onPress={() => {
+                          if (!canContribute) {
+                            return;
+                          }
 
-                        setContributionError("");
-                        setSelectedSongId(item.id);
-                        setSelectedAmount("10");
-                        setCustomAmount("");
-                      }}
-                      style={[styles.arrowButton, !isSessionLive && styles.arrowButtonDisabled]}
-                    >
-                      <Ionicons name="arrow-up" size={13} color="#C95A52" />
-                    </Pressable>
+                          setContributionError("");
+                          setSelectedSongId(item.id);
+                          setSelectedAmount("10");
+                          setCustomAmount("");
+                        }}
+                        style={[styles.arrowButton, !canContribute && styles.arrowButtonDisabled]}
+                      >
+                        <Ionicons name="arrow-up" size={13} color="#C95A52" />
+                      </Pressable>
+                    )}
                   </View>
                   </View>
                 );
@@ -1156,6 +1391,82 @@ actionColumn: {
       <Modal
         animationType="slide"
         transparent
+        visible={isTipModalOpen}
+        onRequestClose={() => setIsTipModalOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalCopy}>
+                <Text style={styles.modalEyebrow}>Tip the DJ</Text>
+                <Text style={styles.modalTitle}>{djName ?? "DJ"}</Text>
+                <Text style={styles.modalSubtitle}>
+                  Send a tip for a great set. It goes straight to their account.
+                </Text>
+              </View>
+              <Pressable onPress={() => setIsTipModalOpen(false)} style={styles.modalCloseButton}>
+                <Ionicons name="close" size={18} color={theme.colors.ink} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={styles.amountSelector}
+              contentContainerStyle={styles.amountSelectorContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {quickAmounts.map((amount) => {
+                const isSelected = tipSelectedAmount === String(amount) && !tipCustomAmount;
+
+                return (
+                  <Pressable
+                    key={amount}
+                    onPress={() => {
+                      setTipSelectedAmount(String(amount));
+                      setTipCustomAmount("");
+                    }}
+                    style={[styles.amountOption, isSelected && styles.amountOptionSelected]}
+                  >
+                    <Text style={[styles.amountOptionText, isSelected && styles.amountOptionTextSelected]}>{`$${amount}`}</Text>
+                  </Pressable>
+                );
+              })}
+
+              <View style={styles.customAmountWrap}>
+                <Text style={styles.customAmountLabel}>Custom amount</Text>
+                <TextInput
+                  keyboardType="numeric"
+                  onChangeText={(text) => {
+                    setTipCustomAmount(text);
+                    setTipSelectedAmount("");
+                  }}
+                  placeholder="Enter amount"
+                  placeholderTextColor={theme.colors.inkMuted}
+                  style={styles.customAmountInput}
+                  value={tipCustomAmount}
+                />
+              </View>
+            </ScrollView>
+
+            {tipError ? <Text style={styles.contributionError}>{tipError}</Text> : null}
+
+            <Pressable
+              disabled={!canSubmitTip || tipMutation.isPending}
+              onPress={() => {
+                void handleSubmitTip();
+              }}
+              style={[styles.modalCta, (!canSubmitTip || tipMutation.isPending) && styles.modalCtaDisabled]}
+            >
+              <Text style={styles.modalCtaText}>
+                {tipMutation.isPending ? "Sending tip" : `Tip ${formatUsd(tipAmountCents)}`}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="slide"
+        transparent
         visible={Boolean(selectedRequesterSong)}
         onRequestClose={() => setSelectedRequesterSongId(null)}
       >
@@ -1229,17 +1540,22 @@ actionColumn: {
               showsVerticalScrollIndicator
             >
               {selectedRequesterList.map((requester) => (
-                <Link key={requester.id} href={`/profile/${requester.id}` as Href} asChild>
-                  <Pressable onPress={() => setSelectedRequesterSongId(null)} style={styles.requesterListItem}>
-                    <Image source={{ uri: requester.imageUri }} style={styles.requesterListAvatar} />
-                    <View style={styles.requesterListCopy}>
-                      <Text style={styles.requesterListName}>{requester.name}</Text>
-                      <Text style={styles.requesterListHandle}>{requester.handle}</Text>
-                    </View>
-                    <Text style={styles.requesterListAmount}>{formatUsd(requester.paidCents)}</Text>
-                    <Ionicons name="chevron-forward" size={18} color={theme.colors.inkMuted} />
-                  </Pressable>
-                </Link>
+                <Pressable
+                  key={requester.id}
+                  onPress={() => {
+                    setSelectedRequesterSongId(null);
+                    openProfile(requester);
+                  }}
+                  style={styles.requesterListItem}
+                >
+                  <Image source={{ uri: requester.imageUri }} style={styles.requesterListAvatar} />
+                  <View style={styles.requesterListCopy}>
+                    <Text style={styles.requesterListName}>{requester.name}</Text>
+                    <Text style={styles.requesterListHandle}>{requester.handle}</Text>
+                  </View>
+                  <Text style={styles.requesterListAmount}>{formatUsd(requester.paidCents)}</Text>
+                  <Ionicons name="chevron-forward" size={18} color={theme.colors.inkMuted} />
+                </Pressable>
               ))}
             </ScrollView>
           </View>

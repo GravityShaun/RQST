@@ -246,7 +246,7 @@ async function request<T>(apiBaseUrl: string, path: string, init: RequestInit = 
 export function login(apiBaseUrl: string, email: string, password: string) {
   return request<TokenResponse>(apiBaseUrl, "/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, role: "admin" }),
   });
 }
 

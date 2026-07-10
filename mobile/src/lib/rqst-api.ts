@@ -1,7 +1,7 @@
 import { Platform } from "react-native";
 import type { SongRequestSummary } from "@rqst/contracts";
 
-import { refreshAuthTokens } from "./auth-api";
+import { isAuthRequestError, refreshAuthTokens } from "./auth-api";
 import { apiBaseUrl } from "./api-config";
 import { toCamelCase } from "./json";
 import { getAccessToken, getRefreshToken, useAuthStore } from "../store/auth";
@@ -31,8 +31,12 @@ async function refreshSessionTokens(): Promise<boolean> {
       const tokens = await refreshAuthTokens(refreshToken);
       await useAuthStore.getState().applyTokens(tokens);
       return true;
-    } catch {
-      await useAuthStore.getState().signOut();
+    } catch (error) {
+      // Keep the local session on transient network failures; only sign out
+      // when the refresh token is rejected by the server.
+      if (isAuthRequestError(error) && error.isUnauthorized) {
+        await useAuthStore.getState().signOut();
+      }
       return false;
     } finally {
       refreshPromise = null;
@@ -102,7 +106,11 @@ export async function rqstApi<T>(path: string, options: ApiOptions = {}): Promis
 export type RequestCreatePayload = {
   song_id?: number;
   amount_cents: number;
+  shoutout_amount_cents?: number;
+  play_deadline_minutes?: number | null;
+  play_deadline_amount_cents?: number;
   note?: string | null;
+  use_complimentary?: boolean;
   song?: {
     title: string;
     artist: string;
@@ -117,6 +125,10 @@ export type RequestCreatePayload = {
 };
 
 export type ContributionCreatePayload = {
+  amount_cents: number;
+};
+
+export type TipCreatePayload = {
   amount_cents: number;
 };
 

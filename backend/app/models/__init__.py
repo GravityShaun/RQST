@@ -1,4 +1,6 @@
 from app.models.entities import (
+    ComplimentarySongCode,
+    ComplimentarySongCredit,
     Contribution,
     DeviceToken,
     DJEarningsLedger,
@@ -12,6 +14,7 @@ from app.models.entities import (
     Report,
     Song,
     SongRequest,
+    Tip,
     User,
     Venue,
 )
@@ -21,10 +24,13 @@ from app.models.enums import (
     PaymentStatus,
     RequestStatus,
     SessionStatus,
+    TipStatus,
     UserRole,
 )
 
 __all__ = [
+    "ComplimentarySongCode",
+    "ComplimentarySongCredit",
     "Contribution",
     "ContributionStatus",
     "DeviceToken",
@@ -43,6 +49,8 @@ __all__ = [
     "SessionStatus",
     "Song",
     "SongRequest",
+    "Tip",
+    "TipStatus",
     "User",
     "UserRole",
     "Venue",

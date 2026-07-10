@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 
 from app.api.deps import DBSession, require_role
@@ -9,8 +9,20 @@ from app.models import DJProfile, Event, User, UserRole, Venue
 from app.schemas.djs import DJDiscoverRead, DJProfileCreate, DJProfileRead
 from app.schemas.earnings import DjEarningsDashboardRead, LedgerEntryRead, WithdrawRequest, WithdrawResponse
 from app.schemas.events import EventCreate, EventExtend, EventRead, EventUpdate
+from app.schemas.complimentary import (
+    ComplimentaryCodeIssueCreate,
+    ComplimentaryCodeIssueRead,
+    ComplimentaryCodeSummaryRead,
+    ComplimentaryCodeUpdate,
+)
 from app.services.earnings import build_earnings_dashboard, list_ledger_entries, request_withdrawal
 from app.services.discover import get_discover_dj, list_discover_djs, list_public_djs
+from app.services.complimentary import (
+    issue_complimentary_code,
+    list_complimentary_codes_for_event,
+    update_complimentary_code_settings,
+    void_active_codes_for_event,
+)
 from app.services.event_sessions import is_event_live, sync_live_sessions_for_events
 from app.services.events import (
     end_event_now,
@@ -211,6 +223,7 @@ def end_event(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This show is not live.")
 
     end_event_now(event)
+    void_active_codes_for_event(db, event.id)
     db.commit()
     db.refresh(event)
     sync_live_sessions_for_events(db)
@@ -225,6 +238,7 @@ def delete_event(
 ) -> None:
     profile = _get_profile(db, user)
     event = _get_owned_event(db, profile, event_id)
+    void_active_codes_for_event(db, event.id)
     db.delete(event)
     db.commit()
     sync_live_sessions_for_events(db)
@@ -255,6 +269,61 @@ async def upload_event_flyer(
     db.commit()
     db.refresh(event)
     return serialize_event(db, event)
+
+
+@router.get("/events/{event_id}/complimentary-codes", response_model=ComplimentaryCodeSummaryRead)
+def list_event_complimentary_codes(
+    event_id: int,
+    db: DBSession,
+    user: Annotated[User, Depends(require_role(UserRole.DJ, UserRole.ADMIN))],
+) -> ComplimentaryCodeSummaryRead:
+    profile = _get_profile(db, user)
+    event = _get_owned_event(db, profile, event_id)
+    return list_complimentary_codes_for_event(db, event=event)
+
+
+@router.post(
+    "/events/{event_id}/complimentary-codes",
+    response_model=ComplimentaryCodeIssueRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def issue_event_complimentary_code(
+    event_id: int,
+    db: DBSession,
+    user: Annotated[User, Depends(require_role(UserRole.DJ, UserRole.ADMIN))],
+    payload: Annotated[ComplimentaryCodeIssueCreate, Body()] = ComplimentaryCodeIssueCreate(),
+) -> ComplimentaryCodeIssueRead:
+    profile = _get_profile(db, user)
+    event = _get_owned_event(db, profile, event_id)
+    issued = issue_complimentary_code(
+        db,
+        event=event,
+        dj_profile=profile,
+        allow_multiple_uses_per_user=payload.allow_multiple_uses_per_user,
+    )
+    db.commit()
+    return issued
+
+
+@router.patch(
+    "/events/{event_id}/complimentary-codes",
+    response_model=ComplimentaryCodeIssueRead,
+)
+def update_event_complimentary_code(
+    event_id: int,
+    payload: ComplimentaryCodeUpdate,
+    db: DBSession,
+    user: Annotated[User, Depends(require_role(UserRole.DJ, UserRole.ADMIN))],
+) -> ComplimentaryCodeIssueRead:
+    profile = _get_profile(db, user)
+    event = _get_owned_event(db, profile, event_id)
+    updated = update_complimentary_code_settings(
+        db,
+        event=event,
+        allow_multiple_uses_per_user=payload.allow_multiple_uses_per_user,
+    )
+    db.commit()
+    return updated
 
 
 @router.get("/{slug}/events", response_model=list[EventRead])

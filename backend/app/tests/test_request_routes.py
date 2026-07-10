@@ -256,6 +256,7 @@ def test_create_request_persists_song_snapshot_and_returns_it_in_session_list(
         f"/api/v1/sessions/{session.id}/requests",
         json={
             "amount_cents": 900,
+            "shoutout_amount_cents": 500,
             "note": "Happy birthday from table seven",
             "song": {
                 "title": "Midnight City",
@@ -279,6 +280,7 @@ def test_create_request_persists_song_snapshot_and_returns_it_in_session_list(
     assert body["song_album"] == "Hurry Up, We're Dreaming"
     assert body["song_album_art_url"] == "https://example.com/midnight-city.jpg"
     assert body["note"] == "Happy birthday from table seven"
+    assert body["shoutout_amount_cents"] == 500
 
     song = db_session.get(Song, body["song_id"])
     request = db_session.get(SongRequest, body["id"])
@@ -289,6 +291,8 @@ def test_create_request_persists_song_snapshot_and_returns_it_in_session_list(
     assert song.duration_ms == 244000
     assert song.isrc == "GB55H1100002"
     assert request.note == "Happy birthday from table seven"
+    assert request.shoutout_amount_cents == 500
+    assert request.original_amount_cents == 900
 
     list_response = client.get(f"/api/v1/sessions/{session.id}/requests")
     assert list_response.status_code == 200
@@ -296,7 +300,8 @@ def test_create_request_persists_song_snapshot_and_returns_it_in_session_list(
     assert list_item["id"] == body["id"]
     assert list_item["song_title"] == "Midnight City"
     assert list_item["song_album_art_url"] == "https://example.com/midnight-city.jpg"
-    assert list_item["note"] == "Happy birthday from table seven"
+    assert list_item["note"] is None
+    assert list_item["shoutout_amount_cents"] == 0
 
 
 def test_session_queue_excludes_played_and_filters_by_event(
@@ -760,3 +765,152 @@ def test_reset_current_session_queue_clears_open_and_inactive_requests(
 
     remaining = db_session.get(SongRequest, request_id)
     assert remaining is None
+
+
+def test_dj_played_requests_returns_played_songs_with_shoutout_fields(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    world = seed_request_world(db_session)
+    listener = world["listener"]
+    dj_user = world["dj_user"]
+    session = world["session"]
+    song = world["song"]
+
+    create_response = client.post(
+        f"/api/v1/sessions/{session.id}/requests",
+        json={
+            "song_id": song.id,
+            "amount_cents": 900,
+            "shoutout_amount_cents": 500,
+            "note": "For Alex",
+        },
+        headers=auth_headers(listener),
+    )
+    assert create_response.status_code == 201
+    request_id = create_response.json()["id"]
+
+    request = db_session.get(SongRequest, request_id)
+    assert request is not None
+    request.status = RequestStatus.PLAYED
+    request.shoutout_fulfilled = True
+    db_session.commit()
+
+    current_queue = client.get("/api/v1/dj/requests/current", headers=auth_headers(dj_user))
+    assert current_queue.status_code == 200
+    assert current_queue.json() == []
+
+    played_response = client.get("/api/v1/dj/requests/played", headers=auth_headers(dj_user))
+    assert played_response.status_code == 200
+    played = played_response.json()
+    assert len(played) == 1
+    assert played[0]["id"] == request_id
+    assert played[0]["status"] == RequestStatus.PLAYED
+    assert played[0]["shoutout_amount_cents"] == 500
+    assert played[0]["note"] == "For Alex"
+    assert played[0]["shoutout_fulfilled"] is True
+
+
+def test_me_requests_keeps_played_requests(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    world = seed_request_world(db_session)
+    listener = world["listener"]
+    session = world["session"]
+    song = world["song"]
+
+    create_response = client.post(
+        f"/api/v1/sessions/{session.id}/requests",
+        json={"song_id": song.id, "amount_cents": 900},
+        headers=auth_headers(listener),
+    )
+    assert create_response.status_code == 201
+    request_id = create_response.json()["id"]
+
+    request = db_session.get(SongRequest, request_id)
+    assert request is not None
+    request.status = RequestStatus.PLAYED
+    db_session.commit()
+
+    response = client.get("/api/v1/me/requests", headers=auth_headers(listener))
+    assert response.status_code == 200
+    requests = response.json()
+    assert len(requests) == 1
+    assert requests[0]["id"] == request_id
+    assert requests[0]["status"] == RequestStatus.PLAYED
+
+
+def test_me_requests_includes_queued_shoutout_for_requester(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.services.payments.should_auto_complete_payments", lambda: True)
+
+    world = seed_request_world(db_session)
+    listener = world["listener"]
+    session = world["session"]
+    song = world["song"]
+
+    create_response = client.post(
+        f"/api/v1/sessions/{session.id}/requests",
+        json={
+            "song_id": song.id,
+            "amount_cents": 900,
+            "shoutout_amount_cents": 500,
+            "note": "For Alex",
+        },
+        headers=auth_headers(listener),
+    )
+    assert create_response.status_code == 201
+    request_id = create_response.json()["id"]
+
+    response = client.get("/api/v1/me/requests", headers=auth_headers(listener))
+    assert response.status_code == 200
+    requests = response.json()
+    assert len(requests) == 1
+    assert requests[0]["id"] == request_id
+    assert requests[0]["status"] == RequestStatus.OPEN
+    assert requests[0]["note"] == "For Alex"
+    assert requests[0]["shoutout_amount_cents"] == 500
+
+
+def test_me_requests_includes_played_shoutout_for_requester(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.services.payments.should_auto_complete_payments", lambda: True)
+
+    world = seed_request_world(db_session)
+    listener = world["listener"]
+    session = world["session"]
+    song = world["song"]
+
+    create_response = client.post(
+        f"/api/v1/sessions/{session.id}/requests",
+        json={
+            "song_id": song.id,
+            "amount_cents": 900,
+            "shoutout_amount_cents": 500,
+            "note": "For Alex",
+        },
+        headers=auth_headers(listener),
+    )
+    assert create_response.status_code == 201
+    request_id = create_response.json()["id"]
+
+    request = db_session.get(SongRequest, request_id)
+    assert request is not None
+    request.status = RequestStatus.PLAYED
+    request.shoutout_fulfilled = True
+    db_session.commit()
+
+    response = client.get("/api/v1/me/requests", headers=auth_headers(listener))
+    assert response.status_code == 200
+    requests = response.json()
+    assert len(requests) == 1
+    assert requests[0]["note"] == "For Alex"
+    assert requests[0]["shoutout_amount_cents"] == 500
+    assert requests[0]["shoutout_fulfilled"] is True

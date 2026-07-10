@@ -1,5 +1,4 @@
-import { useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { apiRoutes } from "@rqst/contracts";
 
 import { activeSession as mockActiveSession } from "../features/rqst/mock-data";
@@ -29,9 +28,7 @@ function isJoinableNearbySession(session: NearbySession): boolean {
 
 export function useActiveSession(options?: ActiveSessionOptions) {
   const requireSelection = options?.requireSelection ?? false;
-  const queryClient = useQueryClient();
   const selectedSession = useAppStore((state) => state.selectedSession);
-  const setSelectedSession = useAppStore((state) => state.setSelectedSession);
 
   const nearbySessionsQuery = useQuery({
     queryKey: NEARBY_SESSIONS_QUERY_KEY,
@@ -79,43 +76,6 @@ export function useActiveSession(options?: ActiveSessionOptions) {
     matchedNearbySession?.eventStartsAt ?? nearbySession?.eventStartsAt,
   );
   const activeEventId = matchedNearbySession?.eventId ?? nearbySession?.eventId ?? null;
-
-  useEffect(() => {
-    if (!selectedSession?.sessionId) {
-      return;
-    }
-
-    void queryClient.invalidateQueries({ queryKey: NEARBY_SESSIONS_QUERY_KEY });
-  }, [queryClient, selectedSession?.sessionId]);
-
-  useEffect(() => {
-    if (!requireSelection || !selectedSession?.sessionId) {
-      return;
-    }
-
-    if (nearbySessionsQuery.isLoading || nearbySessionsQuery.isFetching) {
-      return;
-    }
-
-    if (nearbySessionsQuery.data == null) {
-      return;
-    }
-
-    const matched = nearbySessionsQuery.data.find((session) => session.id === selectedSession.sessionId);
-    if (!matched || !isJoinableNearbySession(matched)) {
-      const endedSessionId = selectedSession.sessionId;
-      setSelectedSession(null);
-      queryClient.removeQueries({ queryKey: ["sessionRequests", endedSessionId] });
-    }
-  }, [
-    nearbySessionsQuery.data,
-    nearbySessionsQuery.isFetching,
-    nearbySessionsQuery.isLoading,
-    queryClient,
-    requireSelection,
-    selectedSession?.sessionId,
-    setSelectedSession,
-  ]);
 
   return {
     sessionId: hasSession ? sessionId : null,
