@@ -12,6 +12,7 @@ from app.models.enums import (
     PaymentStatus,
     RequestStatus,
     SessionStatus,
+    TipStatus,
     UserRole,
 )
 
@@ -25,9 +26,10 @@ class TimestampMixin:
 
 class User(Base, TimestampMixin):
     __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("email", "role", name="uq_users_email_role"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     display_name: Mapped[str] = mapped_column(String(120))
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -153,13 +155,51 @@ class SongRequest(Base, TimestampMixin):
     total_amount_cents: Mapped[int] = mapped_column(Integer, default=0)
     currency: Mapped[str] = mapped_column(String(3), default="USD")
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    shoutout_amount_cents: Mapped[int] = mapped_column(Integer, default=0)
+    shoutout_fulfilled: Mapped[bool | None] = mapped_column(nullable=True)
+    play_deadline_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    play_deadline_amount_cents: Mapped[int] = mapped_column(Integer, default=0)
+    play_deadline_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    play_deadline_remaining_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    play_deadline_elapsed_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     rank_snapshot: Mapped[int | None] = mapped_column(Integer, nullable=True)
     confirmed_by_dj_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     played_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_complimentary: Mapped[bool] = mapped_column(Boolean, default=False)
 
     song: Mapped[Song] = relationship()
+
+
+class ComplimentarySongCode(Base, TimestampMixin):
+    """Shared show code friends can redeem for complimentary songs (up to max uses)."""
+
+    __tablename__ = "complimentary_song_codes"
+    __table_args__ = (UniqueConstraint("code", name="uq_complimentary_song_codes_code"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    dj_profile_id: Mapped[int] = mapped_column(ForeignKey("dj_profiles.id"), index=True)
+    code: Mapped[str] = mapped_column(String(32), index=True)
+    max_uses: Mapped[int] = mapped_column(Integer, default=10)
+    allow_multiple_uses_per_user: Mapped[bool] = mapped_column(Boolean, default=False)
+    voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ComplimentarySongCredit(Base, TimestampMixin):
+    """A redeemed complimentary code, available until the listener uses it on a request."""
+
+    __tablename__ = "complimentary_song_credits"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code_id: Mapped[int] = mapped_column(ForeignKey("complimentary_song_codes.id"), index=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    dj_profile_id: Mapped[int] = mapped_column(ForeignKey("dj_profiles.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    used_song_request_id: Mapped[int | None] = mapped_column(ForeignKey("song_requests.id"), nullable=True)
 
 
 class Payment(Base, TimestampMixin):
@@ -170,7 +210,7 @@ class Payment(Base, TimestampMixin):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     dj_profile_id: Mapped[int] = mapped_column(ForeignKey("dj_profiles.id"), index=True)
     session_id: Mapped[int] = mapped_column(ForeignKey("dj_sessions.id"), index=True)
-    song_request_id: Mapped[int] = mapped_column(ForeignKey("song_requests.id"), index=True)
+    song_request_id: Mapped[int | None] = mapped_column(ForeignKey("song_requests.id"), index=True, nullable=True)
     provider: Mapped[str] = mapped_column(String(64), default="polar")
     provider_checkout_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     provider_payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -185,6 +225,20 @@ class Payment(Base, TimestampMixin):
     succeeded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     refunded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class Tip(Base, TimestampMixin):
+    __tablename__ = "tips"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("dj_sessions.id"), index=True)
+    dj_profile_id: Mapped[int] = mapped_column(ForeignKey("dj_profiles.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    amount_cents: Mapped[int] = mapped_column(Integer)
+    currency: Mapped[str] = mapped_column(String(3), default="USD")
+    status: Mapped[TipStatus] = mapped_column(String(32), default=TipStatus.PENDING_PAYMENT)
+    payment_id: Mapped[int | None] = mapped_column(ForeignKey("payments.id"), nullable=True)
+    thanked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Contribution(Base, TimestampMixin):
@@ -222,7 +276,8 @@ class DJEarningsLedger(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     dj_profile_id: Mapped[int] = mapped_column(ForeignKey("dj_profiles.id"), index=True)
     session_id: Mapped[int] = mapped_column(ForeignKey("dj_sessions.id"), index=True)
-    song_request_id: Mapped[int] = mapped_column(ForeignKey("song_requests.id"), index=True)
+    song_request_id: Mapped[int | None] = mapped_column(ForeignKey("song_requests.id"), index=True, nullable=True)
+    tip_id: Mapped[int | None] = mapped_column(ForeignKey("tips.id"), index=True, nullable=True)
     payment_id: Mapped[int] = mapped_column(ForeignKey("payments.id"), index=True)
     amount_cents: Mapped[int] = mapped_column(Integer)
     currency: Mapped[str] = mapped_column(String(3), default="USD")

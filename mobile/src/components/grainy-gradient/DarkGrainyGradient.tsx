@@ -1,5 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import {
   Canvas,
   Skia,
@@ -19,6 +19,7 @@ import {
 import { GRAINY_GRADIENT_SHADER } from "./conf";
 import { hexToRgba } from "./helper";
 import type { IGrainyGradient } from "./types";
+import { useGrainyAnimationTime } from "./useGrainyAnimationTime";
 
 const METAL_MAX_TEXTURE_SIZE = 8192;
 
@@ -47,7 +48,7 @@ export const DarkGrainyGradient = memo(function DarkGrainyGradient({
   const resolvedGrainColor = grainColor ?? requestDarkBackground;
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [layout, setLayout] = useState({ height: 0, width: 0 });
-  const [time, setTime] = useState(0);
+  const time = useGrainyAnimationTime(animated, speed);
   const width = Math.min(
     paramsWidth ?? (layout.width > 0 ? layout.width : screenWidth),
     METAL_MAX_TEXTURE_SIZE,
@@ -60,30 +61,6 @@ export const DarkGrainyGradient = memo(function DarkGrainyGradient({
     () => Skia.RuntimeEffect.Make(GRAINY_GRADIENT_SHADER),
     [],
   );
-
-  useEffect(() => {
-    if (!animated || width <= 0 || height <= 0) {
-      return undefined;
-    }
-
-    let frameId = 0;
-    let lastTimestamp = 0;
-
-    const tick = (timestamp: number) => {
-      if (lastTimestamp > 0) {
-        const deltaSeconds = (timestamp - lastTimestamp) / 1000;
-        setTime((current) => current + deltaSeconds * speed);
-      }
-      lastTimestamp = timestamp;
-      frameId = requestAnimationFrame(tick);
-    };
-
-    frameId = requestAnimationFrame(tick);
-
-    return () => {
-      cancelAnimationFrame(frameId);
-    };
-  }, [animated, height, speed, width]);
 
   const parsedColors = useMemo(() => {
     const result: [number, number, number, number][] = [];

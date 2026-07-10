@@ -129,6 +129,14 @@ export interface SongRequestSummary {
   totalAmountCents: number;
   currency: string;
   note?: string | null;
+  shoutoutAmountCents?: number;
+  shoutoutFulfilled?: boolean | null;
+  playDeadlineMinutes?: number | null;
+  playDeadlineAmountCents?: number;
+  playDeadlineExpiresAt?: string | null;
+  playDeadlineRemainingSeconds?: number | null;
+  playDeadlineElapsedSeconds?: number | null;
+  expiredAt?: string | null;
   rankSnapshot?: number | null;
   confirmedByDjAt?: string | null;
   playedAt?: string | null;
@@ -160,6 +168,42 @@ export interface SongRequestSummary {
   latestPaymentStatus?: string | null;
   checkoutUrl?: string | null;
   contributors: RequestContributor[];
+  isComplimentary?: boolean;
+}
+
+export interface ComplimentaryCodeIssue {
+  id: number;
+  eventId: number;
+  code: string;
+  createdAt: string;
+  usedCount: number;
+  maxUses: number;
+  remainingUses: number;
+  allowMultipleUsesPerUser?: boolean;
+  voidedAt?: string | null;
+}
+
+export interface ComplimentaryCodeSummary {
+  eventId: number;
+  usedCount: number;
+  maxUses: number;
+  remainingUses: number;
+  code?: ComplimentaryCodeIssue | null;
+}
+
+export interface ComplimentaryCredit {
+  id: number;
+  eventId: number;
+  djProfileId: number;
+  djArtistName?: string | null;
+  djSlug?: string | null;
+  eventName?: string | null;
+  eventStartsAt?: string | null;
+  venueName?: string | null;
+  liveSessionId?: number | null;
+  usedAt?: string | null;
+  usedSongRequestId?: number | null;
+  createdAt: string;
 }
 
 export type LedgerStatus =
@@ -202,7 +246,7 @@ export interface ShowEarnings {
 export interface LedgerEntry {
   id: number;
   sessionId: number;
-  songRequestId: number;
+  songRequestId?: number | null;
   paymentId: number;
   songTitle?: string | null;
   songArtist?: string | null;
@@ -216,6 +260,42 @@ export interface LedgerEntry {
   availableAt?: string | null;
   paidOutAt?: string | null;
   createdAt: string;
+}
+
+export type TipStatus = "pending_payment" | "succeeded" | "thanked" | "cancelled" | "refunded";
+
+export interface TipSummary {
+  id: number;
+  sessionId: number;
+  djProfileId: number;
+  userId: number;
+  senderDisplayName: string;
+  senderAvatarUrl?: string | null;
+  djArtistName?: string | null;
+  venueName?: string | null;
+  amountCents: number;
+  currency: string;
+  status: TipStatus;
+  paymentId?: number | null;
+  checkoutUrl?: string | null;
+  thankedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ListenerProfileSummary {
+  id: number;
+  displayName: string;
+  avatarUrl?: string | null;
+  handle: string;
+  role: string;
+  requestsMade: number;
+  songsSupported: number;
+  tipsSent: number;
+  tipsSentCents: number;
+  totalSpentCents: number;
+  memberSince: string;
+  isEmailVerified: boolean;
 }
 
 export type SongPayoutStatus = "show_pool" | "in_wallet" | "paid_out";

@@ -8,6 +8,7 @@ import { AppToast } from "../components/AppToast";
 import { AuthGuard } from "../components/AuthGuard";
 import { ThemeSync } from "../components/ThemeSync";
 import { SessionQueueSync } from "./SessionQueueSync";
+import { ActiveSessionLifecycle } from "./ActiveSessionLifecycle";
 import { useAuthStore } from "../store/auth";
 import { usePremiumTheme } from "../store/theme";
 
@@ -41,6 +42,7 @@ export function AppProviders({ children }: PropsWithChildren) {
         <AuthBootstrap>
           <ThemeSync />
           <AuthGuard>
+            <ActiveSessionLifecycle />
             <SessionQueueSync />
             {children}
           </AuthGuard>

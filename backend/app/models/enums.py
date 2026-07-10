@@ -54,3 +54,11 @@ class LedgerStatus(StrEnum):
     ON_HOLD = "on_hold"
     PAID_OUT = "paid_out"
 
+
+class TipStatus(StrEnum):
+    PENDING_PAYMENT = "pending_payment"
+    SUCCEEDED = "succeeded"
+    THANKED = "thanked"
+    CANCELLED = "cancelled"
+    REFUNDED = "refunded"
+

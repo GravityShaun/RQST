@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import admin, auth, djs, health, me, notifications, payments, requests, sessions, songs, venues
+from app.api.routes import admin, auth, djs, health, me, notifications, payments, requests, sessions, songs, tips, venues
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -14,6 +14,8 @@ api_router.include_router(sessions.dj_router)
 api_router.include_router(songs.router)
 api_router.include_router(requests.router)
 api_router.include_router(requests.dj_router)
+api_router.include_router(tips.router)
+api_router.include_router(tips.dj_router)
 api_router.include_router(payments.router)
 api_router.include_router(notifications.router)
 api_router.include_router(admin.router)

@@ -20,9 +20,8 @@ from app.models import (
     SongRequest,
 )
 from app.payments.polar import build_checkout_url, verify_webhook_signature
-from app.services.queue import apply_successful_contribution, cancel_contribution
+from app.services.queue import apply_successful_contribution, cancel_contribution, set_play_deadline_expiry
 from app.realtime.queue import schedule_session_queue_broadcast
-
 settings = get_settings()
 
 
@@ -34,31 +33,41 @@ def should_auto_complete_payments() -> bool:
 def complete_successful_payment(
     db: Session,
     *,
-    payment: Payment,
+    payment: Payment | None,
     contribution: Contribution,
     request: SongRequest,
     provider_payment_id: str | None = None,
+    is_complimentary: bool = False,
 ) -> None:
-    payment.status = PaymentStatus.PAYMENT_SUCCEEDED
-    payment.provider_payment_id = provider_payment_id
-    payment.succeeded_at = datetime.now(UTC)
+    if payment is not None:
+        payment.status = PaymentStatus.PAYMENT_SUCCEEDED
+        payment.provider_payment_id = provider_payment_id
+        payment.succeeded_at = datetime.now(UTC)
     contribution.status = ContributionStatus.SUCCEEDED
+    is_initial = request.status == RequestStatus.PENDING_PAYMENT
     apply_successful_contribution(
         request,
         amount_cents=contribution.amount_cents,
-        is_initial=request.status == RequestStatus.PENDING_PAYMENT,
+        is_initial=is_initial,
     )
-    db.add(
-        DJEarningsLedger(
-            dj_profile_id=payment.dj_profile_id,
-            session_id=payment.session_id,
-            song_request_id=payment.song_request_id,
-            payment_id=payment.id,
-            amount_cents=payment.net_amount_cents,
-            currency=payment.currency,
-            status=LedgerStatus.PENDING_CONFIRMATION,
+    if is_initial and request.play_deadline_minutes:
+        set_play_deadline_expiry(request)
+    if payment is not None and not is_complimentary and not request.is_complimentary:
+        deadline_amount_cents = request.play_deadline_amount_cents or 0
+        dj_gross = max(0, payment.gross_amount_cents - deadline_amount_cents)
+        _, _, dj_net = calculate_fees(dj_gross)
+        ledger_amount = dj_net if deadline_amount_cents > 0 else payment.net_amount_cents
+        db.add(
+            DJEarningsLedger(
+                dj_profile_id=payment.dj_profile_id,
+                session_id=payment.session_id,
+                song_request_id=payment.song_request_id,
+                payment_id=payment.id,
+                amount_cents=ledger_amount,
+                currency=payment.currency,
+                status=LedgerStatus.PENDING_CONFIRMATION,
+            )
         )
-    )
     schedule_session_queue_broadcast(request.session_id)
 
 
@@ -87,8 +96,8 @@ def create_payment(
     user_id: int,
     dj_profile_id: int,
     session_id: int,
-    song_request_id: int,
     gross_amount_cents: int,
+    song_request_id: int | None = None,
 ) -> Payment:
     platform_fee, processing_fee, net_amount = calculate_fees(gross_amount_cents)
     payment = Payment(
@@ -110,6 +119,9 @@ def create_payment(
 
 
 def handle_webhook(db: Session, payload: dict, signature: str | None = None) -> None:
+    from app.models import Tip, TipStatus
+    from app.services.tips import complete_successful_tip_payment
+
     verify_webhook_signature(payload, signature)
 
     event_id = payload["event_id"]
@@ -129,6 +141,33 @@ def handle_webhook(db: Session, payload: dict, signature: str | None = None) -> 
     payment = db.get(Payment, payment_id)
     if not payment:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
+
+    tip = db.scalar(select(Tip).where(Tip.payment_id == payment.id))
+    if tip is not None:
+        match payload["event_type"]:
+            case "payment.succeeded":
+                complete_successful_tip_payment(
+                    db,
+                    payment=payment,
+                    tip=tip,
+                    provider_payment_id=payload["data"].get("provider_payment_id"),
+                )
+            case "payment.failed":
+                payment.status = PaymentStatus.PAYMENT_FAILED
+                payment.failed_at = datetime.now(UTC)
+                tip.status = TipStatus.CANCELLED
+            case "payment.refunded":
+                payment.status = PaymentStatus.PAYMENT_REFUNDED
+                payment.refunded_at = datetime.now(UTC)
+                tip.status = TipStatus.REFUNDED
+            case "payment.disputed":
+                payment.status = PaymentStatus.PAYMENT_DISPUTED
+            case _:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported event type")
+        return
+
+    if payment.song_request_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request contribution not found")
 
     request = db.get(SongRequest, payment.song_request_id)
     contribution = db.scalar(select(Contribution).where(Contribution.payment_id == payment.id))

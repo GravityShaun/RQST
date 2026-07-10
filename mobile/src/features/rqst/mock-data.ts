@@ -24,6 +24,7 @@ export type QueueItem = {
   requestedBy: RequesterContribution[];
   status: string;
   momentum: string;
+  playDeadlineExpiresAt?: string | null;
   imageUri?: string;
   uploadedBy: UserProfile;
 };
@@ -68,8 +69,21 @@ export type UserRequest = {
   addedToSongCents: number;
   myAddedContributions: UserAddedContribution[];
   isOriginalRequester: boolean;
-  status: "Pending" | "Open" | "Played" | "Canceled";
+  status: "Pending" | "Open" | "Played" | "Canceled" | "TimedOut";
   canCancel: boolean;
+  shoutoutMessage?: string | null;
+  shoutoutAmountCents?: number;
+  shoutoutFulfilled?: boolean | null;
+  songRequestAmountCents?: number;
+  playDeadlineMinutes?: number | null;
+  playDeadlineAmountCents?: number;
+  playDeadlineExpiresAt?: string | null;
+  playDeadlineRemainingSeconds?: number | null;
+  playDeadlineElapsedSeconds?: number | null;
+  expiredAt?: string | null;
+  isComplimentary?: boolean;
+  kind?: "request" | "tip";
+  tipThanked?: boolean;
 };
 
 export const activeSession = {

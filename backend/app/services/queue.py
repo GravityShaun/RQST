@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+import logging
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete, or_, select
@@ -11,10 +12,13 @@ from app.models import (
     Contribution,
     ContributionStatus,
     DJEarningsLedger,
+    DJSession,
     Payment,
     RequestStatus,
     SongRequest,
 )
+
+logger = logging.getLogger(__name__)
 
 INACTIVE_QUEUE_STATUSES = {
     RequestStatus.CANCELLED,
@@ -105,15 +109,62 @@ def confirm_request(song_request: SongRequest) -> None:
     song_request.confirmed_by_dj_at = datetime.now(UTC)
 
 
-def mark_request_played(song_request: SongRequest) -> None:
+def mark_request_expired(song_request: SongRequest) -> None:
+    if song_request.status in QUEUE_INACTIVE_STATUSES:
+        return
+    song_request.status = RequestStatus.EXPIRED
+    song_request.expired_at = datetime.now(UTC)
+
+
+def set_play_deadline_expiry(song_request: SongRequest, *, now: datetime | None = None) -> None:
+    if not song_request.play_deadline_minutes:
+        return
+    current = now or datetime.now(UTC)
+    song_request.play_deadline_expires_at = current + timedelta(minutes=song_request.play_deadline_minutes)
+
+
+def capture_play_deadline_timing(song_request: SongRequest, *, now: datetime | None = None) -> None:
+    if not song_request.play_deadline_minutes or not song_request.play_deadline_expires_at:
+        return
+
+    current = now or datetime.now(UTC)
+    expires_at = _as_utc(song_request.play_deadline_expires_at)
+    total_seconds = max(0, int(song_request.play_deadline_minutes) * 60)
+    remaining_seconds = max(0, int((expires_at - current).total_seconds()))
+    elapsed_seconds = min(total_seconds, max(0, total_seconds - remaining_seconds))
+
+    song_request.play_deadline_remaining_seconds = remaining_seconds
+    song_request.play_deadline_elapsed_seconds = elapsed_seconds
+    # Freeze the deadline clock at the moment of play.
+    song_request.play_deadline_expires_at = current
+
+    logger.info(
+        "Play deadline stopped for request %s: remaining=%ss elapsed=%ss total=%ss",
+        song_request.id,
+        remaining_seconds,
+        elapsed_seconds,
+        total_seconds,
+    )
+
+
+def mark_request_played(song_request: SongRequest, *, include_shoutout: bool = False) -> None:
+    if song_request.status == RequestStatus.EXPIRED:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Request deadline has passed")
     if song_request.status != RequestStatus.CONFIRMED_BY_DJ:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Request must be confirmed first")
+    played_at = datetime.now(UTC)
+    capture_play_deadline_timing(song_request, now=played_at)
     song_request.status = RequestStatus.PLAYED
-    song_request.played_at = datetime.now(UTC)
+    song_request.played_at = played_at
+    if (song_request.shoutout_amount_cents or 0) > 0 and song_request.note:
+        song_request.shoutout_fulfilled = include_shoutout
 
 
 def delete_song_request(db: Session, song_request: SongRequest) -> None:
+    from app.services.complimentary import restore_complimentary_credit_for_request
+
     request_id = song_request.id
+    restore_complimentary_credit_for_request(db, song_request)
     db.execute(delete(DJEarningsLedger).where(DJEarningsLedger.song_request_id == request_id))
     db.execute(delete(Contribution).where(Contribution.song_request_id == request_id))
     db.execute(delete(Payment).where(Payment.song_request_id == request_id))
@@ -168,7 +219,10 @@ def cancel_open_requests_for_session(
     if event_id is not None:
         stmt = stmt.where(SongRequest.event_id == event_id)
 
+    from app.services.complimentary import restore_complimentary_credit_for_request
+
     for request in db.scalars(stmt):
+        restore_complimentary_credit_for_request(db, request)
         request.status = RequestStatus.CANCELLED
         request.cancelled_at = current
 
@@ -191,7 +245,10 @@ def cancel_mismatched_open_requests(db: Session, session: DJSession, *, now: dat
         or_(SongRequest.event_id.is_(None), SongRequest.event_id != session.event_id),
     )
 
+    from app.services.complimentary import restore_complimentary_credit_for_request
+
     for request in db.scalars(stmt):
+        restore_complimentary_credit_for_request(db, request)
         request.status = RequestStatus.CANCELLED
         request.cancelled_at = current
 

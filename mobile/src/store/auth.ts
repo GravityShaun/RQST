@@ -2,13 +2,20 @@ import { create } from "zustand";
 
 import {
   fetchCurrentUser,
+  isAuthRequestError,
   loginWithPassword,
   refreshAuthTokens,
   registerAccount,
   type TokenPair,
   type UserProfile,
 } from "../lib/auth-api";
-import { clearStoredTokens, loadStoredTokens, saveStoredTokens } from "../lib/auth-storage";
+import {
+  clearStoredTokens,
+  loadStoredSession,
+  saveStoredSession,
+  saveStoredTokens,
+  saveStoredUser,
+} from "../lib/auth-storage";
 
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -31,10 +38,14 @@ async function hydrateUser(accessToken: string): Promise<UserProfile> {
   return fetchCurrentUser(accessToken);
 }
 
+function isUnauthorizedError(error: unknown): boolean {
+  return isAuthRequestError(error) && error.isUnauthorized;
+}
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   status: "loading",
   user: null,
-  accessToken: devAccessToken,
+  accessToken: null,
   refreshToken: null,
 
   bootstrap: async () => {
@@ -48,26 +59,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     try {
-      const storedTokens = await loadStoredTokens();
+      const storedSession = await loadStoredSession();
 
-      if (storedTokens) {
+      if (storedSession) {
         try {
-          const user = await hydrateUser(storedTokens.accessToken);
+          const user = await hydrateUser(storedSession.accessToken);
+          await saveStoredUser(user);
           set({
             status: "authenticated",
             user,
-            accessToken: storedTokens.accessToken,
-            refreshToken: storedTokens.refreshToken,
+            accessToken: storedSession.accessToken,
+            refreshToken: storedSession.refreshToken,
           });
           return;
         } catch {
           try {
-            const refreshed = await refreshAuthTokens(storedTokens.refreshToken);
-            await saveStoredTokens({
-              accessToken: refreshed.accessToken,
-              refreshToken: refreshed.refreshToken,
-            });
+            const refreshed = await refreshAuthTokens(storedSession.refreshToken);
             const user = await hydrateUser(refreshed.accessToken);
+            await saveStoredSession(
+              {
+                accessToken: refreshed.accessToken,
+                refreshToken: refreshed.refreshToken,
+              },
+              user,
+            );
             set({
               status: "authenticated",
               user,
@@ -75,8 +90,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               refreshToken: refreshed.refreshToken,
             });
             return;
-          } catch {
-            await clearStoredTokens();
+          } catch (refreshError) {
+            // Access tokens expire often; only wipe the session when the
+            // server rejects the refresh token. Network / backend outages
+            // should keep the user signed in with the cached profile.
+            if (isUnauthorizedError(refreshError)) {
+              await clearStoredTokens();
+            } else {
+              set({
+                status: "authenticated",
+                user: storedSession.user,
+                accessToken: storedSession.accessToken,
+                refreshToken: storedSession.refreshToken,
+              });
+              return;
+            }
           }
         }
       }
@@ -118,6 +146,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       refreshToken: tokens.refreshToken,
     });
     const user = await hydrateUser(tokens.accessToken);
+    await saveStoredUser(user);
     set({
       status: "authenticated",
       user,
@@ -151,6 +180,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   setUser: (user) => {
+    void saveStoredUser(user);
     set({ user });
   },
 }));

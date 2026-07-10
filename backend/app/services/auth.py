@@ -13,15 +13,21 @@ from app.services.dj_profiles import ensure_dj_profile_for_user
 
 
 def register_user(db: Session, payload: RegisterRequest) -> User:
-    existing = db.scalar(select(User).where(User.email == payload.email.lower()))
+    role = payload.role if payload.role in UserRole else UserRole.LISTENER
+    existing = db.scalar(
+        select(User).where(User.email == payload.email.lower(), User.role == role)
+    )
     if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already registered for this role",
+        )
 
     user = User(
         email=payload.email.lower(),
         password_hash=hash_password(payload.password),
         display_name=payload.display_name,
-        role=payload.role if payload.role in UserRole else UserRole.LISTENER,
+        role=role,
     )
     db.add(user)
     db.flush()
@@ -30,7 +36,9 @@ def register_user(db: Session, payload: RegisterRequest) -> User:
 
 
 def login_user(db: Session, payload: LoginRequest) -> User:
-    user = db.scalar(select(User).where(User.email == payload.email.lower()))
+    user = db.scalar(
+        select(User).where(User.email == payload.email.lower(), User.role == payload.role)
+    )
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     return user

@@ -800,12 +800,14 @@ function BackgroundTexture() {
 }
 
 export function ScreenShell({
+  background,
   children,
   contentContainerStyle,
   edgeToEdgeTop = false,
   refreshControl,
   scrollRef,
 }: PropsWithChildren<{
+  background?: ReactNode;
   contentContainerStyle?: StyleProp<ViewStyle>;
   edgeToEdgeTop?: boolean;
   refreshControl?: ScrollViewProps["refreshControl"];
@@ -819,7 +821,7 @@ export function ScreenShell({
       edges={edgeToEdgeTop ? ["left", "right", "bottom"] : undefined}
       style={[styles.screen, edgeToEdgeTop && styles.screenEdgeToEdgeTop]}
     >
-      {edgeToEdgeTop ? null : <BackgroundTexture />}
+      {background ?? (edgeToEdgeTop ? null : <BackgroundTexture />)}
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}

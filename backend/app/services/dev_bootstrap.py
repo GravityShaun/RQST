@@ -31,7 +31,9 @@ def ensure_admin_user(db: Session) -> User | None:
     if settings.environment != "local":
         return None
 
-    user = db.scalar(select(User).where(User.email == CONSOLE_ADMIN_EMAIL))
+    user = db.scalar(
+        select(User).where(User.email == CONSOLE_ADMIN_EMAIL, User.role == UserRole.ADMIN)
+    )
     if user:
         return user
 
@@ -53,7 +55,7 @@ def ensure_console_dj_user(db: Session) -> User | None:
     if settings.environment != "local":
         return None
 
-    user = db.scalar(select(User).where(User.email == CONSOLE_DJ_EMAIL))
+    user = db.scalar(select(User).where(User.email == CONSOLE_DJ_EMAIL, User.role == UserRole.DJ))
     if user:
         return user
 

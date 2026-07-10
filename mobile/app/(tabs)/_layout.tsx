@@ -11,7 +11,7 @@ const tabs = [
   { name: "find", title: "Find", icon: "compass-outline" as const, activeIcon: "compass" as const },
   { name: "list", title: "List", icon: "list-outline" as const, activeIcon: "list" as const },
   { name: "requests", title: "Request", icon: "add" as const, activeIcon: "add" as const },
-  { name: "settings", title: "Settings", icon: "person-outline" as const, activeIcon: "person" as const },
+  { name: "settings", title: "Profile", icon: "person-outline" as const, activeIcon: "person" as const },
 ];
 
 export default function TabsLayout() {

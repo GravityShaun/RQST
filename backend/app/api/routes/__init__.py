@@ -1,4 +1,4 @@
-from app.api.routes import admin, auth, djs, health, me, notifications, payments, requests, sessions, songs, venues
+from app.api.routes import admin, auth, djs, health, me, notifications, payments, requests, sessions, songs, tips, venues
 
 __all__ = [
     "admin",
@@ -11,6 +11,7 @@ __all__ = [
     "requests",
     "sessions",
     "songs",
+    "tips",
     "venues",
 ]
 

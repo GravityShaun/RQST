@@ -16,14 +16,26 @@ from app.models import (
     User,
     UserRole,
 )
-from app.repositories.requests import build_request_read, build_request_reads, find_active_song_request, get_session_queue
+from app.repositories.requests import (
+    build_request_read,
+    build_request_reads,
+    find_active_song_request,
+    get_session_expired_requests,
+    get_session_played_requests,
+    get_session_queue,
+)
 from app.realtime.queue import schedule_session_queue_broadcast
 from app.schemas.common import MessageResponse
-from app.schemas.requests import ContributionCreate, RequestCreate, RequestRead
+from app.schemas.requests import ContributionCreate, MarkPlayedRequest, RequestCreate, RequestRead
+from app.services.complimentary import (
+    consume_complimentary_credit,
+    find_available_credit_for_request,
+)
+from app.services.deadlines import expire_overdue_requests
 from app.services.dj_sessions import get_active_dj_session
 from app.services.earnings import credit_ledger_for_played_request, reverse_ledger_for_request
 from app.services.event_sessions import resolve_event_id_for_session
-from app.services.payments import create_payment, maybe_auto_complete_payment
+from app.services.payments import complete_successful_payment, create_payment, maybe_auto_complete_payment
 from app.services.queue import (
     assert_request_undo_allowed,
     cancel_contribution,
@@ -60,6 +72,23 @@ def get_session_requests(session_id: int, db: DBSession) -> list[RequestRead]:
     return build_request_reads(db, queue)
 
 
+@router.get("/sessions/{session_id}/requests/played", response_model=list[RequestRead])
+def get_session_played_requests_route(session_id: int, db: DBSession) -> list[RequestRead]:
+    if _get_live_session_or_none(db, session_id) is None:
+        return []
+    played_requests = get_session_played_requests(db, session_id)
+    return build_request_reads(db, played_requests)
+
+
+@router.get("/sessions/{session_id}/requests/expired", response_model=list[RequestRead])
+def get_session_expired_requests_route(session_id: int, db: DBSession) -> list[RequestRead]:
+    if _get_live_session_or_none(db, session_id) is None:
+        return []
+    expire_overdue_requests(db)
+    expired_requests = get_session_expired_requests(db, session_id)
+    return build_request_reads(db, expired_requests)
+
+
 @router.post("/sessions/{session_id}/requests", response_model=RequestRead, status_code=status.HTTP_201_CREATED)
 def create_request(
     session_id: int,
@@ -81,11 +110,30 @@ def create_request(
     if not song:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Song metadata is required")
 
+    shoutout_amount_cents = payload.shoutout_amount_cents
+    play_deadline_amount_cents = 0 if payload.use_complimentary else payload.play_deadline_amount_cents
+    play_deadline_minutes = None if payload.use_complimentary else payload.play_deadline_minutes
+    payment_amount_cents = payload.amount_cents + shoutout_amount_cents + play_deadline_amount_cents
+
     event_id = resolve_event_id_for_session(db, session)
     cancel_mismatched_open_requests(db, session)
     existing = find_active_song_request(db, session, song.id)
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Song already exists in queue; contribute instead")
+
+    complimentary_credit = None
+    if payload.use_complimentary:
+        complimentary_credit = find_available_credit_for_request(
+            db,
+            user_id=user.id,
+            event_id=event_id,
+            dj_profile_id=session.dj_profile_id,
+        )
+        if complimentary_credit is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="No complimentary song available for this show",
+            )
 
     profile = db.get(DJProfile, session.dj_profile_id)
     request = SongRequest(
@@ -97,31 +145,57 @@ def create_request(
         original_amount_cents=payload.amount_cents,
         total_amount_cents=0,
         currency=session.currency,
-        note=payload.note,
+        note=payload.note.strip() if payload.note else None,
+        shoutout_amount_cents=shoutout_amount_cents,
+        play_deadline_minutes=play_deadline_minutes,
+        play_deadline_amount_cents=play_deadline_amount_cents,
+        is_complimentary=bool(payload.use_complimentary),
     )
     db.add(request)
     db.flush()
 
-    payment = create_payment(
-        db=db,
-        user_id=user.id,
-        dj_profile_id=profile.id if profile else session.dj_profile_id,
-        session_id=session_id,
-        song_request_id=request.id,
-        gross_amount_cents=payload.amount_cents,
-    )
-    contribution = Contribution(
-        song_request_id=request.id,
-        user_id=user.id,
-        amount_cents=payload.amount_cents,
-        currency=session.currency,
-        is_initial=True,
-        status=ContributionStatus.PENDING_PAYMENT,
-        payment_id=payment.id,
-    )
-    db.add(contribution)
-    db.flush()
-    maybe_auto_complete_payment(db, payment=payment, contribution=contribution, request=request)
+    if complimentary_credit is not None:
+        consume_complimentary_credit(db, complimentary_credit, song_request=request)
+        contribution = Contribution(
+            song_request_id=request.id,
+            user_id=user.id,
+            amount_cents=payment_amount_cents,
+            currency=session.currency,
+            is_initial=True,
+            status=ContributionStatus.PENDING_PAYMENT,
+            payment_id=None,
+        )
+        db.add(contribution)
+        db.flush()
+        complete_successful_payment(
+            db,
+            payment=None,
+            contribution=contribution,
+            request=request,
+            is_complimentary=True,
+        )
+    else:
+        payment = create_payment(
+            db=db,
+            user_id=user.id,
+            dj_profile_id=profile.id if profile else session.dj_profile_id,
+            session_id=session_id,
+            song_request_id=request.id,
+            gross_amount_cents=payment_amount_cents,
+        )
+        contribution = Contribution(
+            song_request_id=request.id,
+            user_id=user.id,
+            amount_cents=payment_amount_cents,
+            currency=session.currency,
+            is_initial=True,
+            status=ContributionStatus.PENDING_PAYMENT,
+            payment_id=payment.id,
+        )
+        db.add(contribution)
+        db.flush()
+        maybe_auto_complete_payment(db, payment=payment, contribution=contribution, request=request)
+
     db.commit()
     db.refresh(request)
     schedule_session_queue_broadcast(session_id)
@@ -242,7 +316,36 @@ def get_current_dj_requests(
     session = get_active_dj_session(db, profile.id)
     if not session:
         return []
-    return build_request_reads(db, get_session_queue(db, session.id))
+    return build_request_reads(db, get_session_queue(db, session.id), include_dj_fields=True)
+
+
+@dj_router.get("/played", response_model=list[RequestRead])
+def get_current_dj_played_requests(
+    db: DBSession,
+    user: Annotated[User, Depends(require_role(UserRole.DJ, UserRole.ADMIN))],
+) -> list[RequestRead]:
+    profile = db.scalar(select(DJProfile).where(DJProfile.user_id == user.id))
+    if not profile:
+        return []
+    session = get_active_dj_session(db, profile.id)
+    if not session:
+        return []
+    return build_request_reads(db, get_session_played_requests(db, session.id), include_dj_fields=True)
+
+
+@dj_router.get("/expired", response_model=list[RequestRead])
+def get_current_dj_expired_requests(
+    db: DBSession,
+    user: Annotated[User, Depends(require_role(UserRole.DJ, UserRole.ADMIN))],
+) -> list[RequestRead]:
+    profile = db.scalar(select(DJProfile).where(DJProfile.user_id == user.id))
+    if not profile:
+        return []
+    session = get_active_dj_session(db, profile.id)
+    if not session:
+        return []
+    expire_overdue_requests(db)
+    return build_request_reads(db, get_session_expired_requests(db, session.id), include_dj_fields=True)
 
 
 @router.post("/requests/{request_id}/cancel", response_model=MessageResponse)
@@ -316,12 +419,16 @@ def mark_played(
     request_id: int,
     db: DBSession,
     _user: Annotated[User, Depends(require_role(UserRole.DJ, UserRole.ADMIN))],
+    payload: MarkPlayedRequest = MarkPlayedRequest(),
 ) -> MessageResponse:
     request = db.get(SongRequest, request_id)
     if not request:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
-    mark_request_played(request)
-    credit_ledger_for_played_request(db, request.id)
+    has_shoutout = (request.shoutout_amount_cents or 0) > 0 and bool(request.note)
+    include_shoutout = payload.include_shoutout and has_shoutout
+    mark_request_played(request, include_shoutout=include_shoutout)
+    if not request.is_complimentary:
+        credit_ledger_for_played_request(db, request.id, include_shoutout=include_shoutout or not has_shoutout)
     db.commit()
     schedule_session_queue_broadcast(request.session_id)
     return MessageResponse(message="Request marked played")
@@ -333,9 +440,12 @@ def reject_request(
     db: DBSession,
     _user: Annotated[User, Depends(require_role(UserRole.DJ, UserRole.ADMIN))],
 ) -> MessageResponse:
+    from app.services.complimentary import restore_complimentary_credit_for_request
+
     request = db.get(SongRequest, request_id)
     if not request:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
+    restore_complimentary_credit_for_request(db, request)
     request.status = RequestStatus.REJECTED
     reverse_ledger_for_request(db, request.id)
     db.commit()

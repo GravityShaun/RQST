@@ -297,6 +297,14 @@
                 Edit
               </button>
               <button
+                class="show-action show-action--complimentary"
+                :disabled="saving || isIssuingCode(event.id)"
+                type="button"
+                @click="handleIssueComplimentaryCode(event)"
+              >
+                {{ complimentaryActionLabel(event.id) }}
+              </button>
+              <button
                 class="show-action show-action--delete"
                 :disabled="saving"
                 type="button"
@@ -304,6 +312,42 @@
               >
                 Delete
               </button>
+            </div>
+            <div
+              v-if="complimentaryByEventId[event.id]?.code"
+              class="complimentary-codes-panel"
+            >
+              <div class="complimentary-codes-header">
+                Free song code
+                <span class="muted">
+                  {{ complimentaryByEventId[event.id].usedCount }}/{{
+                    complimentaryByEventId[event.id].maxUses
+                  }}
+                  used
+                </span>
+              </div>
+              <div class="complimentary-code-row">
+                <code class="complimentary-code-value">{{ complimentaryByEventId[event.id].code?.code }}</code>
+                <span class="complimentary-code-status">
+                  {{ complimentaryByEventId[event.id].remainingUses }} remaining
+                </span>
+                <button
+                  class="show-action show-action--copy"
+                  type="button"
+                  @click="copyComplimentaryCode(complimentaryByEventId[event.id].code!.code)"
+                >
+                  Copy
+                </button>
+              </div>
+              <label class="complimentary-multi-use">
+                <input
+                  type="checkbox"
+                  :checked="Boolean(complimentaryByEventId[event.id].code?.allowMultipleUsesPerUser)"
+                  :disabled="saving || isUpdatingCode(event.id)"
+                  @change="handleToggleMultipleUses(event, ($event.target as HTMLInputElement).checked)"
+                />
+                <span>Allow the same person to use this code more than once</span>
+              </label>
             </div>
           </div>
         </div>
@@ -313,7 +357,7 @@
 </template>
 
 <script setup lang="ts">
-import type { DjEvent, PlaceSearchResult } from "@rqst/contracts";
+import type { ComplimentaryCodeSummary, DjEvent, PlaceSearchResult } from "@rqst/contracts";
 
 import {
   emptyEventForm,
@@ -363,6 +407,9 @@ const {
   createEvent,
   updateEvent,
   deleteEvent,
+  listComplimentaryCodes,
+  issueComplimentaryCode,
+  updateComplimentaryCode,
   resolveAssetUrl,
 } = useDjEvents();
 
@@ -374,6 +421,9 @@ const venueSearchQuery = ref("");
 const venueSearchFocused = ref(false);
 const localFlyerPreview = ref<string | null>(null);
 const pendingFlyerFile = ref<File | null>(null);
+const complimentaryByEventId = ref<Record<number, ComplimentaryCodeSummary>>({});
+const issuingCodeEventId = ref<number | null>(null);
+const updatingCodeEventId = ref<number | null>(null);
 let venueSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
 const sortedEvents = computed(() =>
@@ -684,6 +734,9 @@ async function handleDelete(eventId: number) {
 
   try {
     await deleteEvent(eventId);
+    const nextCodes = { ...complimentaryByEventId.value };
+    delete nextCodes[eventId];
+    complimentaryByEventId.value = nextCodes;
     if (editingEventId.value === eventId) {
       showForm.value = false;
       resetForm();
@@ -692,6 +745,134 @@ async function handleDelete(eventId: number) {
     formError.value = error.value || "Could not delete show.";
   }
 }
+
+function isIssuingCode(eventId: number) {
+  return issuingCodeEventId.value === eventId;
+}
+
+function isUpdatingCode(eventId: number) {
+  return updatingCodeEventId.value === eventId;
+}
+
+function complimentaryActionLabel(eventId: number) {
+  if (isIssuingCode(eventId)) {
+    return "Issuing...";
+  }
+  const summary = complimentaryByEventId.value[eventId];
+  if (summary?.code) {
+    return "Show free code";
+  }
+  return "Free song code";
+}
+
+async function refreshComplimentaryCodes(eventId: number) {
+  try {
+    complimentaryByEventId.value = {
+      ...complimentaryByEventId.value,
+      [eventId]: await listComplimentaryCodes(eventId),
+    };
+  } catch {
+    // Keep the shows page usable if code history fails to load.
+  }
+}
+
+async function handleIssueComplimentaryCode(event: DjEvent) {
+  const existing = complimentaryByEventId.value[event.id];
+  if (existing?.code) {
+    await copyComplimentaryCode(existing.code.code);
+    return;
+  }
+
+  issuingCodeEventId.value = event.id;
+  formError.value = "";
+  try {
+    const issued = await issueComplimentaryCode(event.id);
+    complimentaryByEventId.value = {
+      ...complimentaryByEventId.value,
+      [event.id]: {
+        eventId: event.id,
+        usedCount: issued.usedCount,
+        maxUses: issued.maxUses,
+        remainingUses: issued.remainingUses,
+        code: issued,
+      },
+    };
+    await copyComplimentaryCode(issued.code);
+  } catch {
+    formError.value = error.value || "Could not issue complimentary code.";
+  } finally {
+    issuingCodeEventId.value = null;
+  }
+}
+
+async function handleToggleMultipleUses(event: DjEvent, allowMultipleUsesPerUser: boolean) {
+  const summary = complimentaryByEventId.value[event.id];
+  if (!summary?.code) {
+    return;
+  }
+
+  const previous = Boolean(summary.code.allowMultipleUsesPerUser);
+  complimentaryByEventId.value = {
+    ...complimentaryByEventId.value,
+    [event.id]: {
+      ...summary,
+      code: {
+        ...summary.code,
+        allowMultipleUsesPerUser,
+      },
+    },
+  };
+
+  updatingCodeEventId.value = event.id;
+  formError.value = "";
+  try {
+    const updated = await updateComplimentaryCode(event.id, { allowMultipleUsesPerUser });
+    complimentaryByEventId.value = {
+      ...complimentaryByEventId.value,
+      [event.id]: {
+        eventId: event.id,
+        usedCount: updated.usedCount,
+        maxUses: updated.maxUses,
+        remainingUses: updated.remainingUses,
+        code: updated,
+      },
+    };
+  } catch {
+    complimentaryByEventId.value = {
+      ...complimentaryByEventId.value,
+      [event.id]: {
+        ...summary,
+        code: {
+          ...summary.code,
+          allowMultipleUsesPerUser: previous,
+        },
+      },
+    };
+    formError.value = error.value || "Could not update free code settings.";
+  } finally {
+    updatingCodeEventId.value = null;
+  }
+}
+
+async function copyComplimentaryCode(code: string) {
+  try {
+    await navigator.clipboard.writeText(code);
+  } catch {
+    // Clipboard may be unavailable; the code remains visible on the card.
+  }
+}
+
+watch(
+  events,
+  (nextEvents) => {
+    for (const event of nextEvents) {
+      if (!complimentaryByEventId.value[event.id]) {
+        void refreshComplimentaryCodes(event.id);
+      }
+    }
+  },
+  { immediate: true },
+);
 
 onMounted(() => {
   showStatusTimer = setInterval(() => {
@@ -1151,6 +1332,81 @@ onBeforeUnmount(() => {
 .show-action--edit:hover:not(:disabled) {
   background: color-mix(in srgb, var(--rqst-mint) 18%, var(--rqst-btn-secondary-bg));
   border-color: color-mix(in srgb, var(--rqst-mint) 40%, var(--rqst-border));
+}
+
+.show-action--complimentary:hover:not(:disabled) {
+  background: color-mix(in srgb, #7c3aed 14%, var(--rqst-btn-secondary-bg));
+  border-color: color-mix(in srgb, #7c3aed 36%, var(--rqst-border));
+  color: #6d28d9;
+}
+
+.show-action--copy {
+  font-size: 0.72rem;
+  padding: 6px 10px;
+}
+
+.complimentary-codes-panel {
+  border-top: 1px solid var(--rqst-border);
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.complimentary-codes-header {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.complimentary-code-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.complimentary-code-row {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.complimentary-code-value {
+  background: color-mix(in srgb, #7c3aed 10%, var(--rqst-surface));
+  border: 1px solid color-mix(in srgb, #7c3aed 24%, var(--rqst-border));
+  border-radius: 8px;
+  color: #6d28d9;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 6px 10px;
+}
+
+.complimentary-code-status {
+  color: var(--rqst-ink-muted);
+  flex: 1;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.complimentary-multi-use {
+  align-items: flex-start;
+  color: var(--rqst-ink-muted);
+  cursor: pointer;
+  display: flex;
+  font-size: 0.78rem;
+  font-weight: 600;
+  gap: 8px;
+  line-height: 1.35;
+}
+
+.complimentary-multi-use input {
+  accent-color: #7c3aed;
+  margin-top: 2px;
 }
 
 .show-action--delete {

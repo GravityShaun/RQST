@@ -26,18 +26,32 @@ from app.schemas.earnings import (
     PlayedSongEarningsRead,
     ShowEarningsRead,
 )
+from app.services.payments import calculate_fees
 
 ACTIVE_SESSION_STATUSES = {SessionStatus.LIVE, SessionStatus.PAUSED}
 
 
-def credit_ledger_for_played_request(db: Session, song_request_id: int) -> None:
+def credit_ledger_for_played_request(
+    db: Session,
+    song_request_id: int,
+    *,
+    include_shoutout: bool = True,
+) -> None:
     """Move paid-but-unplayed ledger rows into the active show pool."""
+    request = db.get(SongRequest, song_request_id)
     for entry in db.scalars(
         select(DJEarningsLedger).where(
             DJEarningsLedger.song_request_id == song_request_id,
             DJEarningsLedger.status == LedgerStatus.PENDING_CONFIRMATION,
         )
     ):
+        if (
+            request
+            and (request.shoutout_amount_cents or 0) > 0
+            and not include_shoutout
+        ):
+            _, _, shoutout_net = calculate_fees(request.shoutout_amount_cents)
+            entry.amount_cents = max(0, entry.amount_cents - shoutout_net)
         entry.status = LedgerStatus.AVAILABLE
     db.flush()
 
@@ -81,7 +95,7 @@ def _wallet_available_cents(entries: list[_LedgerContext]) -> int:
 class _LedgerContext:
     ledger: DJEarningsLedger
     payment: Payment
-    request: SongRequest
+    request: SongRequest | None
     song: Song | None
     session: DJSession
     venue: Venue | None
@@ -92,7 +106,7 @@ def _load_ledger_contexts(db: Session, dj_profile_id: int) -> list[_LedgerContex
     rows = db.execute(
         select(DJEarningsLedger, Payment, SongRequest, Song, DJSession, Venue, Event)
         .join(Payment, Payment.id == DJEarningsLedger.payment_id)
-        .join(SongRequest, SongRequest.id == DJEarningsLedger.song_request_id)
+        .join(SongRequest, SongRequest.id == DJEarningsLedger.song_request_id, isouter=True)
         .join(Song, Song.id == SongRequest.song_id, isouter=True)
         .join(DJSession, DJSession.id == DJEarningsLedger.session_id)
         .join(Venue, Venue.id == DJSession.venue_id, isouter=True)
@@ -189,12 +203,12 @@ def _build_show_summaries(contexts: list[_LedgerContext]) -> list[ShowEarningsRe
         played_request_ids = {
             entry.request.id
             for entry in entries
-            if entry.request.status == RequestStatus.PLAYED
+            if entry.request is not None and entry.request.status == RequestStatus.PLAYED
         }
         pending_request_ids = {
             entry.request.id
             for entry in entries
-            if entry.ledger.status == LedgerStatus.PENDING_CONFIRMATION
+            if entry.request is not None and entry.ledger.status == LedgerStatus.PENDING_CONFIRMATION
         }
 
         shows.append(
@@ -246,7 +260,7 @@ def _derive_payout_status(entries: list[_LedgerContext]) -> str:
 def _build_recent_played_entries(contexts: list[_LedgerContext], *, limit: int = 50) -> list[PlayedSongEarningsRead]:
     by_request: dict[int, list[_LedgerContext]] = {}
     for item in contexts:
-        if item.request.status != RequestStatus.PLAYED or item.request.played_at is None:
+        if item.request is None or item.request.status != RequestStatus.PLAYED or item.request.played_at is None:
             continue
         by_request.setdefault(item.request.id, []).append(item)
 
@@ -263,6 +277,7 @@ def _serialize_played_song_entry(
     entries: list[_LedgerContext],
 ) -> PlayedSongEarningsRead:
     representative = entries[0]
+    assert representative.request is not None
     return PlayedSongEarningsRead(
         song_request_id=song_request_id,
         session_id=representative.session.id,
@@ -277,20 +292,21 @@ def _serialize_played_song_entry(
 
 
 def _serialize_ledger_entry(item: _LedgerContext) -> LedgerEntryRead:
+    is_tip = item.ledger.tip_id is not None
     return LedgerEntryRead(
         id=item.ledger.id,
         session_id=item.ledger.session_id,
         song_request_id=item.ledger.song_request_id,
         payment_id=item.ledger.payment_id,
-        song_title=item.song.title if item.song else None,
-        song_artist=item.song.artist if item.song else None,
+        song_title="Tip" if is_tip else (item.song.title if item.song else None),
+        song_artist="Audience tip" if is_tip else (item.song.artist if item.song else None),
         gross_amount_cents=item.payment.gross_amount_cents,
         net_amount_cents=item.ledger.amount_cents,
         amount_cents=item.ledger.amount_cents,
         status=item.ledger.status,
         venue_name=item.venue.name if item.venue else None,
         event_name=item.event.name if item.event else None,
-        played_at=item.request.played_at,
+        played_at=item.request.played_at if item.request else None,
         available_at=item.ledger.available_at,
         paid_out_at=item.ledger.paid_out_at,
         created_at=item.ledger.created_at,
