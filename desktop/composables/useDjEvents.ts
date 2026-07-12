@@ -256,7 +256,7 @@ export function useDjEvents() {
     saveMessage.value = "";
 
     try {
-      await authFetch<void>(routePath(apiRouteBuilders.djEvent(eventId)), {
+      await authFetch<unknown>(routePath(apiRouteBuilders.djEvent(eventId)), {
         method: "DELETE",
       });
       events.value = events.value.filter((event) => event.id !== eventId);

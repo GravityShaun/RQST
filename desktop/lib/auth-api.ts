@@ -67,7 +67,7 @@ async function authRequest<T>(apiBaseUrl: string, path: string, init: RequestIni
   });
 
   if (!response.ok) {
-    let message = `Request failed with status ${response.status}.`;
+    let message: string;
 
     try {
       const body = (await response.json()) as ApiErrorBody;

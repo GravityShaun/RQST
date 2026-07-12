@@ -23,7 +23,7 @@ function toCamelCase(value: unknown): unknown {
 }
 
 async function parseErrorResponse(response: Response): Promise<string> {
-  let message = `Request failed with status ${response.status}.`;
+  let message: string;
 
   try {
     const body = (await response.json()) as ApiErrorBody;

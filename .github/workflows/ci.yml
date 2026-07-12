@@ -15,7 +15,9 @@ jobs:
           version: 11.7.0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # pnpm 11.7.0 requires Node >= 22.13; Node 20 crashed every run
+          # at pnpm cache resolution (ERR_UNKNOWN_BUILTIN_MODULE node:sqlite)
+          node-version: 22
           cache: "pnpm"
       - uses: actions/setup-python@v5
         with:
@@ -23,4 +25,4 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm test
-      - run: cd Backend && python -m pip install -e .[dev] && pytest
+      - run: cd backend && python -m pip install -e .[dev] && python -m pytest

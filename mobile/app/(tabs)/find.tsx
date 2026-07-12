@@ -313,11 +313,6 @@ circleButton: {
   const [shouldRenderMap, setShouldRenderMap] = useState(false);
 
   const selectedVenue = nearbyVenues.find((venue) => venue.title === selectedVenueTitle) ?? nearbyVenues[0];
-
-  if (!selectedVenue) {
-    return null;
-  }
-
   const featuredVenue = nearbyVenues[1] ?? selectedVenue;
   const topInset = Platform.OS === "ios" ? IOS_TOP_INSET : StatusBar.currentHeight ?? 24;
   const openTop = Math.max(EXPANDED_TOP_GAP, topInset + 88);
@@ -350,6 +345,10 @@ circleButton: {
       task.cancel();
     };
   }, [isFocused]);
+
+  if (!selectedVenue) {
+    return null;
+  }
 
   function animateDrawer(nextExpanded: boolean) {
     setIsExpanded(nextExpanded);

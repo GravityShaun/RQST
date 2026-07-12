@@ -229,7 +229,7 @@ async function request<T>(apiBaseUrl: string, path: string, init: RequestInit = 
 
   const response = await fetch(`${apiBaseUrl}${path}`, { ...init, headers });
   if (!response.ok) {
-    let message = `Request failed with status ${response.status}.`;
+    let message: string;
     try {
       message = parseApiError(response.status, (await response.json()) as ApiErrorBody);
     } catch {

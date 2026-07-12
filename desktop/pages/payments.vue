@@ -180,7 +180,7 @@ import StatCard from "~/components/StatCard.vue";
 import { formatUsd, usePaymentsDashboard } from "~/composables/usePaymentsDashboard";
 import { formatEventDateTime } from "~/utils/datetime";
 
-const { dashboard, pending, error, withdrawMessage, withdrawing, refresh, withdraw } = usePaymentsDashboard();
+const { dashboard, pending, error, withdrawMessage, withdrawing, withdraw } = usePaymentsDashboard();
 
 const totalFees = computed(() => {
   if (!dashboard.value) {
