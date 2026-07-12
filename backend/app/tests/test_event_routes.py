@@ -46,9 +46,10 @@ def client(db_session: Session, monkeypatch) -> Iterator[TestClient]:
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()
 
 
 def _register_dj(client: TestClient, email: str) -> tuple[str, DJProfile]:
@@ -64,7 +65,8 @@ def _register_dj(client: TestClient, email: str) -> tuple[str, DJProfile]:
     assert response.status_code == 201
     token = response.json()["access_token"]
 
-    profile_response = client.post(
+    # Registration auto-creates a DJ profile, so shape it with a PATCH instead of POST.
+    profile_response = client.patch(
         "/api/v1/djs/profile",
         headers={"Authorization": f"Bearer {token}"},
         json={
@@ -75,7 +77,7 @@ def _register_dj(client: TestClient, email: str) -> tuple[str, DJProfile]:
             "genres": ["House"],
         },
     )
-    assert profile_response.status_code == 201
+    assert profile_response.status_code == 200
     profile = profile_response.json()
     return token, profile
 

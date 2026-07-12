@@ -8,6 +8,7 @@ const config: ExpoConfig = {
   owner: "gravshaun",
   scheme: "rqst",
   orientation: "portrait",
+  jsEngine: "hermes",
   newArchEnabled: false,
   plugins: [
     "expo-router",

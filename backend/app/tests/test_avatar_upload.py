@@ -49,7 +49,7 @@ def client(db_session: Session, tmp_path, monkeypatch) -> Iterator[TestClient]:
 
 
 def auth_headers(user: User) -> dict[str, str]:
-    tokens = create_token_pair(str(user.id), user.role.value)
+    tokens = create_token_pair(str(user.id), user.role)
     return {"Authorization": f"Bearer {tokens.access_token}"}
 
 

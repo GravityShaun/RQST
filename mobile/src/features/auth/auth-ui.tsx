@@ -246,6 +246,8 @@ export function AuthSubmitButton({
   disabled?: boolean;
   loading?: boolean;
 }) {
+  const theme = usePremiumTheme();
+  const styles = useAuthStyles();
   return (
     <Pressable
       accessibilityRole="button"
@@ -268,6 +270,7 @@ export function AuthFooterLink({
   href: "/(auth)/login" | "/(auth)/register";
   label: string;
 }) {
+  const styles = useAuthStyles();
   return (
     <View style={styles.footerRow}>
       <Text style={styles.footerPrompt}>{prompt}</Text>

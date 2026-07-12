@@ -10,7 +10,12 @@ from app.core.database import Base, SessionLocal, engine
 from app.realtime.manager import manager
 from app.realtime.queue import broadcast_session_queue, session_queue_channel, set_main_event_loop
 from app.services.db_schema import ensure_sqlite_schema_patches
-from app.services.dev_bootstrap import ensure_admin_user, ensure_local_demo_session, reconcile_local_pending_payments
+from app.services.dev_bootstrap import (
+    ensure_admin_user,
+    ensure_local_demo_session,
+    ensure_local_discover_directory,
+    reconcile_local_pending_payments,
+)
 from app.services.event_sessions import sync_live_sessions_for_events
 from app.services.dj_profiles import ensure_registered_dj_profiles
 
@@ -37,6 +42,7 @@ async def bootstrap_local_data() -> None:
     with SessionLocal() as db:
         ensure_admin_user(db)
         ensure_registered_dj_profiles(db)
+        ensure_local_discover_directory(db)
         ensure_local_demo_session(db)
         sync_live_sessions_for_events(db)
         reconcile_local_pending_payments(db)

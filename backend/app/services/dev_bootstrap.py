@@ -102,6 +102,43 @@ def ensure_local_demo_session(db: Session) -> DJSession | None:
     return session
 
 
+LOCAL_DISCOVER_VENUES = [
+    {
+        "name": "Moonlight Room",
+        "address": "1 Dance Floor",
+        "city": "Brooklyn",
+        "state": "NY",
+        "country": "US",
+    },
+    {
+        "name": "King Street Social",
+        "address": "155 King St",
+        "city": "Charleston",
+        "state": "SC",
+        "country": "US",
+    },
+]
+
+
+def ensure_local_discover_directory(db: Session) -> list[Venue]:
+    settings = get_settings()
+    if settings.environment != "local":
+        return []
+
+    venues: list[Venue] = []
+    for spec in LOCAL_DISCOVER_VENUES:
+        venue = db.scalar(select(Venue).where(Venue.name == spec["name"]))
+        if not venue:
+            venue = Venue(**spec)
+            db.add(venue)
+        venues.append(venue)
+
+    db.commit()
+    for venue in venues:
+        db.refresh(venue)
+    return venues
+
+
 def reconcile_local_pending_payments(db: Session) -> None:
     if not should_auto_complete_payments():
         return

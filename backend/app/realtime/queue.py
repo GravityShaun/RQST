@@ -35,6 +35,6 @@ async def broadcast_session_queue(session_id: int) -> None:
 
 
 def schedule_session_queue_broadcast(session_id: int) -> None:
-    if _main_loop is None:
+    if _main_loop is None or _main_loop.is_closed():
         return
     asyncio.run_coroutine_threadsafe(broadcast_session_queue(session_id), _main_loop)
