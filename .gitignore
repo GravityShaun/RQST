@@ -5,6 +5,8 @@ Thumbs.db
 # Dependencies
 node_modules/
 .pnpm-store/
+# pnpm is the only package manager — never commit bun artifacts
+bun.lock
 bun.lockb
 
 # Environment & secrets

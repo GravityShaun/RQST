@@ -1,10 +1,11 @@
 # RQST
 
-RQST is a DJ song request platform with three applications:
+RQST is a DJ song request platform with four applications and two shared packages:
 
 - `backend`: FastAPI backend for auth, sessions, queueing, payments, and realtime.
 - `mobile`: Expo / React Native listener app.
 - `desktop`: Nuxt 3 + Tauri DJ desktop app.
+- `admin_dashboard`: Tauri admin dashboard for moderation and dispute handling.
 - `packages/contracts`: shared API contracts and generated-client entrypoints.
 - `packages/shared-config`: shared design tokens and product constants.
 
@@ -47,7 +48,14 @@ RQST_APPLE_MUSIC_DEVELOPER_TOKEN=your-apple-music-developer-token
 RQST_APPLE_MUSIC_STOREFRONT=us
 ```
 
-## Source Of Truth Docs
+## Source Of Truth
+
+Code beats docs for current behavior: `backend/app/services/` and
+`backend/app/api/routes/` are the source of truth for what the system
+does today, and shared enums/labels live in
+`packages/shared-config/src/index.ts`. The docs below record product
+intent and design; when they conflict with the code, flag the conflict
+rather than silently trusting either side.
 
 - [Product Requirements](./docs/prd.md)
 - [User Flows](./docs/user-flows.md)
@@ -63,4 +71,3 @@ This repo now includes the implementation scaffold for the MVP blueprint:
 - Expo app shell with tabbed navigation and feature-oriented screens
 - Nuxt 3 + Tauri desktop shell for DJ workflows
 - shared contracts/config packages for cross-app consistency
-# RQST
