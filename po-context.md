@@ -4,7 +4,7 @@
 
 Reason as RQST's Product Owner and deep researcher. Decision lens: does this
 increase paid requests per live session, or DJ trust in getting paid?
-Challenge features against the MVP non-goals in `prd.md` before
+Challenge features against the MVP non-goals in `docs/prd.md` before
 accepting them. Prefer retrieving/verifying (repo paths below, or web
 research for market questions) over answering from this file alone.
 
@@ -16,11 +16,13 @@ core bet: attaching dollars to requests turns a chaotic social interaction
 (shouting at the DJ booth) into a legible, monetizable queue — listeners get
 influence, DJs get a new revenue stream with full control. The trust
 mechanism is the second bet: funds are collected at request time but DJ
-earnings stay pending until the DJ confirms the song, so listeners aren't
-paying for nothing and DJs aren't obligated to play anything. Queue rank is
-purely money-driven (total succeeded contributions), and multiple listeners
-can pool onto one request — the queue is a live market, not a suggestion box.
-MVP is US-only, USD-only.
+earnings stay pending until the song is actually marked played (confirming
+alone credits nothing — `credit_ledger_for_played_request` runs in
+`mark_played`, and funds settle to withdrawable at session end), so listeners
+aren't paying for nothing and DJs aren't obligated to play anything. Queue
+rank is money-driven (total succeeded contributions, FIFO tiebreak at equal
+dollars), and multiple listeners can pool onto one request — the queue is a
+live market, not a suggestion box. MVP is US-only, USD-only.
 
 ## Users
 
@@ -38,32 +40,20 @@ Three roles (evidenced throughout backend auth and PRD): **listener**
 - Two-sided cold start is the existential product problem; nothing in the
   repo says how supply (DJs) gets seeded. See TODO below.
 
-## Roadmap & priorities (derived from commit history, ~weekly cadence since 2026-06-29)
-
-- **In flight (high confidence):** request confirmation flow (last 3 PRs);
-  admin dashboard as a Tauri desktop app; discovery (places/venue search,
-  nearby sessions, Google-style places service); events + flyers attached to
-  venues/DJs; Apple Music as the song-catalog provider; dev-bootstrap demo
-  data (implies demos/pilots are near-term).
-- **Deliberately deferred (from `docs/prd.md` non-goals):** guest checkout,
-  multi-currency, direct Spotify playback, automatic payouts without
-  provider verification.
-- **Known open risks (PRD "Risks To Validate"):** Polar payout/delayed-
-  capture capability, music-metadata/album-art licensing, legality of
-  holding listener funds pre-confirmation, SQLite→Postgres threshold.
-
 ## Domain constraints & closed decisions Claude can't guess
 
 - **Payments are not real yet.** `backend/app/payments/polar.py` fabricates
-  sandbox checkout URLs and `auto_complete_payments=True` fakes success.
-  Every revenue claim is untested against a real processor. The PRD names
-  Polar as an unvalidated risk — treat provider choice as open, not closed.
-- **Platform fee is 12%** (`platform_fee_bps: 1200` in
-  `backend/app/core/config.py`). Who bears it is undocumented — see TODO.
-- Discrepancies to keep in mind: README says "three applications" but four
-  exist (`admin_dashboard/` is unmentioned there), and PRD lists "fully
-  polished admin console" as a non-goal while one is actively being built —
-  scope has drifted past the docs; trust the code for current state.
+  sandbox checkout URLs, and `backend/app/services/payments.py` fakes
+  success when `environment == "local"` with `auto_complete_payments=True`.
+  Every revenue claim is untested against a real processor. The PRD lists
+  Polar checkout as committed scope but flags its payout/delayed-capture
+  capabilities as unvalidated risks — treat provider choice as open, not
+  closed.
+- **Fees, as implemented:** platform fee 12% (`platform_fee_bps: 1200` in
+  `backend/app/core/config.py`) plus a hardcoded 2.9% + 30¢ processing fee
+  (`backend/app/services/payments.py`), both deducted from the listener's
+  gross before crediting the DJ — today the DJ bears all fees. Whether that
+  is the intended product decision is undocumented — see TODO.
 - Canonical terminology: "session" = a DJ's live set accepting requests;
   "contribution" = one listener's payment toward a request; "request" = one
   queue row per canonical song per session. Full state vocabularies live in
@@ -87,9 +77,10 @@ Three roles (evidenced throughout backend auth and PRD): **listener**
 
 ## TODO — needs product-owner input (do not invent answers)
 
-- [ ] **Fee incidence & payout terms:** Is the 12% fee taken from the DJ's
-  cut, added on top for the listener, or split? What payout cadence is
-  promised to DJs?
+- [ ] **Fee incidence & payout terms:** Code currently takes the 12%
+  platform fee and a 2.9% + 30¢ processing fee out of the DJ's cut — is
+  that the intended decision, or should some land on the listener? What
+  payout cadence is promised to DJs?
 - [ ] **Payment provider:** Is Polar committed, or under evaluation? The
   integration is a stub and the PRD flags it as an unvalidated risk.
 - [ ] **Go-to-market:** Which city/venues launch first? Are there pilot DJs
