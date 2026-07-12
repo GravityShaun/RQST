@@ -52,7 +52,9 @@ RQST is a nightlife-first song request platform that lets venue guests pay to re
 - guest checkout
 - multi-currency pricing
 - direct Spotify playback
-- fully polished admin console
+- fully polished admin console (note 2026-07-12: a basic `admin_dashboard/`
+  app is being built; the intended admin scope is an open product question —
+  see the TODO in `po-context.md` — this non-goal has not been re-decided)
 - automatic marketplace payouts without provider verification
 
 ## UX Principles
