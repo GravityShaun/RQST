@@ -55,6 +55,19 @@
   and intent, not verified against code — the exact failure mode the
   kit exists to prevent.
 
+- 2026-07-12 — Symptom: a session was dispatched to "make the
+  verification loop real and land the context kit" as if un-started,
+  but PR #8 had already landed and merged that exact slice into
+  `environment-refactor` minutes earlier (CI green, pytest 57/57).
+  Suspected root cause: the handoff was written before the prior
+  session finished, so the slice was dispatched twice from a stale
+  snapshot. Cost was low only because the second session verified
+  state before redoing work; the two items the merged PR had actually
+  missed (the unfilled `[PASTE JOURNEY SPEC HERE]` placeholder in
+  design-context.md, this observation) are what this follow-up
+  commits. Lesson for future handoffs: state which PR/commit the
+  snapshot describes so a successor can detect staleness cheaply.
+
 ## Research cache
 (empty — first expected entry: payment-provider comparison, when that
 open question is taken up)

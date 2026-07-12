@@ -273,9 +273,3 @@ Every elevated surface also carries a 1–1.5px hairline border — border + sof
 - **Empty states**: bold factual title + actionable next step: "No songs in the queue yet" → "Be the first song request in queue for this set."; "Find a live room" → "Tap the search icon above to browse DJs and venues, then open a live list."; "No DJs, artists, or venues match that search yet."
 - **Domain vocabulary**: "rqsts" (paid requests), "room" / "live room" (venue session), "set" / "show", "queue", "add money" / "up-request" (contribute), "floor" (minimum amount), "shoutout" (paid DJ message), "DJs & artists".
 - **Statuses**: single capitalized words: Open, Queued, Played, Pending, Canceled, Live.
-
----
-
-## New User Journey Spec
-
-[PASTE JOURNEY SPEC HERE]
