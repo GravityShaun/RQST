@@ -37,14 +37,9 @@
 </template>
 
 <script setup lang="ts">
-const { resolved } = useAppTheme();
 const { isLive } = useLiveShow();
 const authStore = useAuthStore();
 const user = computed(() => authStore.user);
-
-const topBarStyle = computed(() => ({
-  backgroundColor: resolved.value === "dark" ? "#243247" : "#e8eaec",
-}));
 
 const items = [
   { label: "Home", to: "/home" },

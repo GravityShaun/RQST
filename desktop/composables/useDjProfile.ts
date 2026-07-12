@@ -114,7 +114,7 @@ export function useDjProfile() {
     });
 
     if (!response.ok) {
-      let message = `Request failed with status ${response.status}.`;
+      let message: string;
 
       try {
         const body = (await response.json()) as ApiErrorBody;

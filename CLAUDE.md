@@ -38,11 +38,10 @@ own say-so.
 1. One wedge slice per session, stated in the first prompt.
 2. Build on a branch; import canonical state names; leave docs alone
    unless the slice is doc reconciliation.
-3. Before declaring done: `cd backend && .venv/bin/python -m pytest`
-   (bare `python3` is not the venv and lacks pytest). (`pnpm lint` and
-   `pnpm test` join this list when their toolchains actually exist —
-   as of 2026-07-12 they are declared but not installed; see the
-   changelog observation.)
+3. Before declaring done: `pnpm lint`, `pnpm test` (both repo root),
+   and `cd backend && .venv/bin/python -m pytest` (bare `python3` is
+   not the venv and lacks pytest) — the full list lives in
+   VERIFICATION.md.
 4. End the session by appending one observation to `changelog.md`
    (symptom + suspected root cause).
 

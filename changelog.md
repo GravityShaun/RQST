@@ -55,6 +55,22 @@
   and intent, not verified against code — the exact failure mode the
   kit exists to prevent.
 
+- 2026-07-12 — Symptom: the lint/test half of the first 2026-07-12 CI
+  observation — scripts declared everywhere, toolchains nowhere.
+  Resolved (PR #9): eslint-config-expo + jest-expo for mobile,
+  @nuxt/eslint-config standalone flat config + vitest for the Nuxt
+  apps (standalone because the @nuxt/eslint module needs `nuxt
+  prepare` codegen before `eslint .` can run — hostile to a bare
+  `pnpm install && pnpm lint` CI job); root lint/test now include
+  admin_dashboard, which the old scripts silently skipped; `vitest
+  run` (not bare `vitest`) so local `pnpm test` doesn't hang in watch
+  mode. First real lint run caught a genuine bug: rules-of-hooks
+  violation in `mobile/app/(tabs)/find.tsx` (hooks after a conditional
+  early return). CI lint/test steps re-enabled on top of the kit's
+  Node 22 and `Backend`→`backend` fixes. Residue: ~70 eslint warnings
+  across the apps (exhaustive-deps, html-self-closing) — non-blocking,
+  but the count shouldn't grow.
+
 ## Research cache
 (empty — first expected entry: payment-provider comparison, when that
 open question is taken up)

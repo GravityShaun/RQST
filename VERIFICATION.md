@@ -6,19 +6,16 @@ own say-so.
 
 ## Code changes (recurring)
 Run locally before any "done" declaration:
-1. `cd backend && .venv/bin/python -m pytest` (the venv's python — bare
+1. `pnpm lint` (repo root — covers mobile, desktop, admin_dashboard)
+2. `pnpm test` (repo root — jest for mobile, vitest for the Nuxt apps)
+3. `cd backend && .venv/bin/python -m pytest` (the venv's python — bare
    `python3` is the system interpreter and lacks pytest; CI instead
    installs fresh via `python -m pip install -e .[dev]`)
 
-It must exit 0, and the pushed branch's GitHub Actions run must show
-the same step executing and exiting 0.
-
-`pnpm lint` and `pnpm test` join this list when their toolchains
-actually exist: as of 2026-07-12 every app declares `eslint`/`jest`/
-`vitest` scripts but no workspace installs those tools and no eslint
-config exists, so the commands cannot pass on any machine (see the
-changelog observation). Do not re-add them to CI until they pass
-locally.
+Each must exit 0, and the pushed branch's GitHub Actions run must show
+the same steps executing and exiting 0. (Lint/test toolchains landed
+2026-07-12, PR #9. eslint errors fail the build, warnings don't — do
+not let the warning count grow.)
 
 Review check (until a lint rule exists): state names are imported from
 `packages/shared-config/src/index.ts`, never restated as string

@@ -29,7 +29,7 @@
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{
+defineProps<{
   displayName: string;
   artistName: string;
   slug: string;

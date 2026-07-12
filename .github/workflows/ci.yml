@@ -23,11 +23,6 @@ jobs:
         with:
           python-version: "3.12"
       - run: pnpm install --frozen-lockfile
-      # `pnpm lint` / `pnpm test` are declared in every app package, but the
-      # toolchains (eslint/jest/vitest) are not devDependencies anywhere and
-      # no eslint config exists — these steps have never passed on any
-      # machine. Re-enable them when the toolchains land (see changelog.md
-      # 2026-07-12 observation).
-      # - run: pnpm lint
-      # - run: pnpm test
+      - run: pnpm lint
+      - run: pnpm test
       - run: cd backend && python -m pip install -e .[dev] && python -m pytest

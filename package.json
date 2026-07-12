@@ -16,8 +16,8 @@
     "dev:mobile:clear": "pnpm --filter @rqst/mobile dev:clear",
     "dev:desktop": "pnpm --filter @rqst/desktop dev",
     "dev:admin": "pnpm --filter @rqst/admin-dashboard dev",
-    "lint": "pnpm --filter @rqst/mobile lint && pnpm --filter @rqst/desktop lint",
-    "test": "pnpm --filter @rqst/mobile test && pnpm --filter @rqst/desktop test",
+    "lint": "pnpm --filter @rqst/mobile lint && pnpm --filter @rqst/desktop lint && pnpm --filter @rqst/admin-dashboard lint",
+    "test": "pnpm --filter @rqst/mobile test && pnpm --filter @rqst/desktop test && pnpm --filter @rqst/admin-dashboard test",
     "contracts:generate": "pnpm --filter @rqst/contracts generate",
     "mobile:dev": "pnpm --filter @rqst/mobile dev",
     "mobile:ios": "pnpm --filter @rqst/mobile ios"
